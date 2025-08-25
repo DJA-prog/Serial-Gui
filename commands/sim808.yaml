@@ -1,0 +1,75 @@
+no_input_commands:
+    AT: "AT check (should return OK)"
+    ATE0: "Disable echo"
+    ATE1: "Enable echo"
+    AT+CSQ: "Check signal quality"
+    AT+CREG?: "Check network registration status"
+    AT+CGATT?: "Check GPRS attach status"
+    AT+COPS?: "Query available networks"
+    AT+COPS=0: "Automatic operator selection"
+    AT+CPIN?: "Check SIM card PIN status"
+    AT+CLCC: "List current calls"
+    ATH: "Hang up call"
+    ATA: "Answer incoming call"
+    AT+COLP=1: "Enable connected line identification presentation"
+
+    # SMS
+    AT+CMGF=1: "Set SMS to text mode"
+    AT+CMGF=0: "Set SMS to PDU mode"
+    AT+CSCA?: "Get SMS center address"
+
+    # GPRS / HTTP
+    AT+CIPSHUT: "Shut down previous GPRS session"
+    AT+CIPSTATUS: "Check GPRS connection status"
+    AT+CIPMUX=0: "Set single connection mode"
+    AT+CIICR: "Bring up wireless connection"
+    AT+CIFSR: "Get local IP address"
+    AT+CIPSEND: "Send data over TCP (Ctrl+Z to end)"
+    AT+CIPCLOSE: "Close TCP connection"
+
+    # HTTP via GPRS
+    AT+HTTPINIT: "Initialize HTTP service"
+    AT+HTTPTERM: "Terminate HTTP service"
+    AT+HTTPACTION=0: "Perform HTTP GET"
+    AT+HTTPACTION=1: "Perform HTTP POST"
+    AT+HTTPREAD: "Read HTTP server response"
+
+    # GPS-specific (SIM808 only)
+    AT+CGNSPWR=1: "Turn on GPS power"
+    AT+CGNSPWR=0: "Turn off GPS power"
+    AT+CGNSINF: "Get GPS info (latitude, longitude, time, etc.)"
+    AT+CGNSURC=1: "Enable GPS unsolicited result codes"
+    AT+CGPSINF=0: "Get basic GPS info"
+    AT+CGPSPWR=1: "Enable GPS module"
+    AT+CGPSRST=0: "Cold restart GPS"
+    AT+CGPSSTATUS?: "Check GPS fix status"
+    AT+CGPSINF=32: "Get extended GPS info"
+
+    # Misc / Device Info
+    AT+CGMR: "Get firmware version"
+    AT+CGSN: "Get IMEI number"
+    AT+CNUM: "Get device number (if supported)"
+    AT+CBC: "Check battery level"
+    AT+CLIP=1: "Enable caller ID notification"
+    AT+CMEE=2: "Enable verbose error reporting"
+    AT+CPAS: "Query current activity status"
+    AT+CFUN=1: "Set full functionality"
+    AT+CFUN=0: "Disable RF (flight mode)"
+    
+input_required_commands:
+    AT+COPS=1,2,\"<operator_code>\": "Manual operator selection by code"
+    ATD<number>;: "Dial a voice call to <number>"
+    AT+CGDCONT=1,\"IP\",\"<APN>\": "Set PDP context"
+    AT+CSTT=\"<APN>\",\"<user>\",\"<pass>\": "Start GPRS with APN/user/pass"
+    AT+CIPSTART=\"TCP\",\"<host>\",<port>: "Start TCP connection"
+    AT+HTTPPARA=\"CID\",1: "Set HTTP bearer profile identifier"
+    AT+HTTPPARA=\"URL\",\"<url>\": "Set HTTP request URL"
+    AT+HTTPPARA=\"CONTENT\",\"application/json\": "Set HTTP content type"
+    AT+HTTPDATA=<length>,<timeout>: "Input data for HTTP POST"
+    AT+CSCA=\"<SMSC_number>\": "Set SMS center address"
+    AT+CMGS=\"<number>\": "Send SMS to <number> (Ctrl+Z to end)"
+    AT+CMGR=<index>: "Read SMS at index"
+    AT+CMGL=\"ALL\": "List all SMS messages"
+    AT+CMGD=<index>: "Delete SMS at index"
+    AT+CGNSSEQ=\"RMC\": "Set NMEA sentence output to RMC only"
+
