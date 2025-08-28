@@ -754,7 +754,7 @@ class MainWindow(QMainWindow):
                     # Update settings
                     label = custom_buttons_table.item(row, 0).text()
                     key = keys[row]
-                    if key not in self.settings['buttons']:
+                    if key in self.settings['buttons']:
                         self.settings['buttons'][key] = {'label': label, 'command': new_command}
                         self.save_settings()
                         print(self.settings['buttons'])
