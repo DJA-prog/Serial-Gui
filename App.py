@@ -129,8 +129,46 @@ class MainWindow(QMainWindow):
         self.history_index = len(self.history)
         self.current_text = ""
 
+        self.set_style()
 
-        # Apply dark theme with electric blue accents
+        # Serial connection
+        self.serial_port = None
+        self.available_ports = self.get_serial_ports()
+
+        # Timer for refreshing serial ports
+        self.refresh_timer = QTimer()
+        self.refresh_timer.timeout.connect(self.refresh_serial_ports)
+        self.refresh_timer.start(1000)  # Refresh every 1 second
+
+        # Timer for connected time
+        self.connected_time_seconds = 0
+        self.connected_time_timer = QTimer()
+        self.connected_time_timer.timeout.connect(self.update_connected_time)
+
+        # Main layout
+        self.main_layout = QVBoxLayout()
+
+        self.create_top_ribbon()  # Create the top ribbon with serial controls
+
+        
+        self.middle_layout = QHBoxLayout() # Middle layout: Split into left (tables) and right (output)
+        self.create_left_panel()  # Create the left panel with configuration and routing tables
+        self.create_right_panel()  # Create the right panel with response display
+        self.main_layout.addLayout(self.middle_layout)
+
+        self.create_bottom_panel()  # Create the bottom panel with status indicators
+
+        # Set central widget
+        central_widget = QWidget()
+        central_widget.setLayout(self.main_layout)
+        self.setCentralWidget(central_widget)
+
+        # Timer for reading serial data
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.read_serial_data)
+
+    def set_style(self) -> None:
+
         style: str = """
             QMainWindow {
                 background-color: #121212;  /* Dark background */
@@ -265,45 +303,7 @@ class MainWindow(QMainWindow):
         style = style.replace("#1E90FF", str(self.settings['general']['accent_color']))
         style = style.replace("#63B8FF", str(self.settings['general']['hover_color']))
 
-        # print(style)
-
         self.setStyleSheet(style)
-
-        # Serial connection
-        self.serial_port = None
-        self.available_ports = self.get_serial_ports()
-
-        # Timer for refreshing serial ports
-        self.refresh_timer = QTimer()
-        self.refresh_timer.timeout.connect(self.refresh_serial_ports)
-        self.refresh_timer.start(1000)  # Refresh every 1 second
-
-        # Timer for connected time
-        self.connected_time_seconds = 0
-        self.connected_time_timer = QTimer()
-        self.connected_time_timer.timeout.connect(self.update_connected_time)
-
-        # Main layout
-        self.main_layout = QVBoxLayout()
-
-        self.create_top_ribbon()  # Create the top ribbon with serial controls
-
-        
-        self.middle_layout = QHBoxLayout() # Middle layout: Split into left (tables) and right (output)
-        self.create_left_panel()  # Create the left panel with configuration and routing tables
-        self.create_right_panel()  # Create the right panel with response display
-        self.main_layout.addLayout(self.middle_layout)
-
-        self.create_bottom_panel()  # Create the bottom panel with status indicators
-
-        # Set central widget
-        central_widget = QWidget()
-        central_widget.setLayout(self.main_layout)
-        self.setCentralWidget(central_widget)
-
-        # Timer for reading serial data
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.read_serial_data)
 
     def create_top_ribbon(self) -> None:
         """
@@ -520,6 +520,46 @@ class MainWindow(QMainWindow):
         clear_history_btn.clicked.connect(self.confirm_clear_history)
         self.command_history_layout.addWidget(clear_history_btn)
 
+    def tab_settings_set(self) -> None:
+        settings = self.settings.get("general", {})
+
+        auto_clear_item = QTableWidgetItem(str(settings.get("auto_clear_output", False)))
+        self.settings_table.setItem(0, 1, auto_clear_item)
+        # Row 1: accent_color (color)
+        accent_color_item = QTableWidgetItem(str(settings.get("accent_color", "#1E90FF")))
+        self.settings_table.setItem(1, 1, accent_color_item)
+        # Row 2: hover_color (color)
+        hover_color_item = QTableWidgetItem(str(settings.get("hover_color", "#63B8FF")))
+        self.settings_table.setItem(2, 1, hover_color_item)
+        # Row 3: maximized (bool)
+        maximized_item = QTableWidgetItem(str(settings.get("maximized", False)))
+        self.settings_table.setItem(3, 1, maximized_item)
+        # Row 4: tx line ending
+        tx_line_ending_item = QTableWidgetItem(str(settings.get("tx_line_ending", "CRLN")))
+        self.settings_table.setItem(4, 1, tx_line_ending_item)
+        # Row 5: Data bits: 8,7,6,5
+        data_bits = QTableWidgetItem(str(settings.get("data_bits", "8")))
+        self.settings_table.setItem(5, 1, data_bits)
+        # Row 6: parity: None, Even, Odd, Space, Mark
+        parity = QTableWidgetItem(str(settings.get("parity", "None")))
+        self.settings_table.setItem(6, 1, parity)
+        # Row 7: Stop bits: 1, 2
+        stop_bits = QTableWidgetItem(str(settings.get("stop_bits", "1")))
+        self.settings_table.setItem(7, 1, stop_bits)
+        # Row 8: Flow Control: None, Hardware, Software
+        flow_control = QTableWidgetItem(str(settings.get("flow_control", "None")))
+        self.settings_table.setItem(8, 1, flow_control)
+        # Row 9: Open mode: Read/Write, Read only, Write only
+        open_mode = QTableWidgetItem(str(settings.get("open_mode", "Read/Write")))
+        self.settings_table.setItem(9, 1, open_mode)
+        # Row 10: reveal_hidden_char (bool)
+        reveal_hidden_char_item = QTableWidgetItem(str(settings.get("reveal_hidden_char", False)))
+        self.settings_table.setItem(10, 1, reveal_hidden_char_item)
+        # Row 11: custom-baudrate (int)
+        custom_baud_rate_item = QTableWidgetItem(str(settings.get("custom-baudrate", 115200)))
+        self.settings_table.setItem(11, 1, custom_baud_rate_item)
+
+
     def tab_settings(self) -> None:
 
         self.settings_tab: QWidget = QWidget()
@@ -539,54 +579,21 @@ class MainWindow(QMainWindow):
 
         # Populate settings
         settings = self.settings.get("general", {})
-        # Row 0: auto_clear_output (bool)
+        
         self.settings_table.setItem(0, 0, QTableWidgetItem("Auto Clear Output"))
-        auto_clear_item = QTableWidgetItem(str(settings.get("auto_clear_output", False)))
-        self.settings_table.setItem(0, 1, auto_clear_item)
-        # Row 1: accent_color (color)
         self.settings_table.setItem(1, 0, QTableWidgetItem("Accent Color"))
-        accent_color_item = QTableWidgetItem(str(settings.get("accent_color", "#1E90FF")))
-        self.settings_table.setItem(1, 1, accent_color_item)
-        # Row 2: hover_color (color)
         self.settings_table.setItem(2, 0, QTableWidgetItem("Hover Color"))
-        hover_color_item = QTableWidgetItem(str(settings.get("hover_color", "#63B8FF")))
-        self.settings_table.setItem(2, 1, hover_color_item)
-        # Row 3: maximized (bool)
         self.settings_table.setItem(3, 0, QTableWidgetItem("Maximized"))
-        maximized_item = QTableWidgetItem(str(settings.get("maximized", False)))
-        self.settings_table.setItem(3, 1, maximized_item)
-        # Row 4: tx line ending
         self.settings_table.setItem(4, 0, QTableWidgetItem("Tx line Ending"))
-        tx_line_ending_item = QTableWidgetItem(str(settings.get("tx_line_ending", "CRLN")))
-        self.settings_table.setItem(4, 1, tx_line_ending_item)
-        # Row 5: Data bits: 8,7,6,5
         self.settings_table.setItem(5, 0, QTableWidgetItem("Data Bits"))
-        data_bits = QTableWidgetItem(str(settings.get("data_bits", "8")))
-        self.settings_table.setItem(5, 1, data_bits)
-        # Row 6: parity: None, Even, Odd, Space, Mark
         self.settings_table.setItem(6, 0, QTableWidgetItem("Parity"))
-        parity = QTableWidgetItem(str(settings.get("parity", "None")))
-        self.settings_table.setItem(6, 1, parity)
-        # Row 7: Stop bits: 1, 2
         self.settings_table.setItem(7, 0, QTableWidgetItem("Stop Bits"))
-        stop_bits = QTableWidgetItem(str(settings.get("stop_bits", "1")))
-        self.settings_table.setItem(7, 1, stop_bits)
-        # Row 8: Flow Control: None, Hardware, Software
         self.settings_table.setItem(8, 0, QTableWidgetItem("Flow Control"))
-        flow_control = QTableWidgetItem(str(settings.get("flow_control", "None")))
-        self.settings_table.setItem(8, 1, flow_control)
-        # Row 9: Open mode: Read/Write, Read only, Write only
         self.settings_table.setItem(9, 0, QTableWidgetItem("Open Mode"))
-        open_mode = QTableWidgetItem(str(settings.get("open_mode", "Read/Write")))
-        self.settings_table.setItem(9, 1, open_mode)
-        # Row 10: reveal_hidden_char (bool)
         self.settings_table.setItem(10, 0, QTableWidgetItem("Reveal Hidden Char"))
-        reveal_hidden_char_item = QTableWidgetItem(str(settings.get("reveal_hidden_char", False)))
-        self.settings_table.setItem(10, 1, reveal_hidden_char_item)
-        # Row 11: custom-baudrate (int)
         self.settings_table.setItem(11, 0, QTableWidgetItem("Custom Baud Rate"))
-        custom_baud_rate_item = QTableWidgetItem(str(settings.get("custom-baudrate", 115200)))
-        self.settings_table.setItem(11, 1, custom_baud_rate_item)
+
+        self.tab_settings_set()
 
         self.settings_layout.addWidget(self.settings_table)
 
@@ -620,6 +627,7 @@ class MainWindow(QMainWindow):
                     else:
                         general["hover_color"] = hex_color
                     self.save_settings()
+                    self.set_style()
 
             # Drop-down / list options
             elif key == "Tx line Ending":
@@ -776,7 +784,9 @@ class MainWindow(QMainWindow):
             self.settings = self.default_settings.copy()
             # Update table
             self.save_settings()
-            QMessageBox.information(self, "Settings Reset", "Settings have been reset to defaults. Please restart the application for all changes to take effect.")
+            self.set_style()
+            self.tab_settings_set()
+            # QMessageBox.information(self, "Settings Reset", "Settings have been reset to defaults. Please restart the application for all changes to take effect.")
 
         reset_button.clicked.connect(reset_to_defaults)
 
