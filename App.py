@@ -8,6 +8,8 @@ from pathlib import Path
 import yaml
 from datetime import datetime
 
+# import sip
+
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QListWidgetItem,
     QTextEdit, QLineEdit, QLabel, QComboBox, QMessageBox, QTableWidget, QTableWidgetItem, QInputDialog, QDialog, QListWidget, QCheckBox,
@@ -171,133 +173,140 @@ class MainWindow(QMainWindow):
 
         style: str = """
             QMainWindow {
-                background-color: #121212;  /* Dark background */
-                color: #FFFFFF;  /* White text */
+            background-color: #121212;  /* Dark background */
+            color: #FFFFFF;  /* White text */
             }
             QLabel {
-                color: #FFFFFF;  /* White text */
+            color: #FFFFFF;  /* White text */
             }
             QLineEdit, QTextEdit, QTableWidget {
-                background-color: #1E1E1E;  /* Slightly lighter dark background */
-                color: #FFFFFF;  /* White text */
-                border: 1px solid #1E90FF;  /* Electric blue border */
-                border-radius: 5px;
+            background-color: #1E1E1E;  /* Slightly lighter dark background */
+            color: #FFFFFF;  /* White text */
+            border: 1px solid #1E90FF;  /* Electric blue border */
+            border-radius: 5px;
+            }
+            QHeaderView::section {
+            background-color: #1E90FF;  /* Electric blue header */
+            color: #FFFFFF;  /* White text */
+            border: 1px solid #1E90FF;
+            font-weight: bold;
+            padding: 4px;
             }
             QComboBox {
-                background-color: #2A2A2A;  /* Slightly lighter background for better visibility */
-                color: #FFFFFF;  /* White text */
-                border: 1px solid #1E90FF;  /* Electric blue border */
-                border-radius: 5px;
-                padding: 2px;
+            background-color: #2A2A2A;  /* Slightly lighter background for better visibility */
+            color: #FFFFFF;  /* White text */
+            border: 1px solid #1E90FF;  /* Electric blue border */
+            border-radius: 5px;
+            padding: 2px;
             }
             QComboBox QAbstractItemView {
-                background-color: #2A2A2A;  /* Dropdown background */
-                color: #FFFFFF;  /* Dropdown text color */
-                border: 1px solid #1E90FF;  /* Electric blue border */
-                selection-background-color: #1E90FF;  /* Electric blue selection */
-                selection-color: #FFFFFF;  /* White text for selection */
+            background-color: #2A2A2A;  /* Dropdown background */
+            color: #FFFFFF;  /* Dropdown text color */
+            border: 1px solid #1E90FF;  /* Electric blue border */
+            selection-background-color: #1E90FF;  /* Electric blue selection */
+            selection-color: #FFFFFF;  /* White text for selection */
             }
             QCheckBox {
-                color: #FFFFFF;  /* White text */
+            color: #FFFFFF;  /* White text */
             }
             QCheckBox::indicator {
-                border: 1px solid #1E90FF;  /* Electric blue border */
-                width: 15px;
-                height: 15px;
-                border-radius: 3px;
-                background-color: #1E1E1E;  /* Dark background */
+            border: 1px solid #1E90FF;  /* Electric blue border */
+            width: 15px;
+            height: 15px;
+            border-radius: 3px;
+            background-color: #1E1E1E;  /* Dark background */
             }
             QCheckBox::indicator:checked {
-                background-color: #1E90FF;  /* Electric blue when checked */
+            background-color: #1E90FF;  /* Electric blue when checked */
             }
             QTableWidget::item {
-                color: #FFFFFF;  /* White text */
+            color: #FFFFFF;  /* White text */
             }
             QTableWidget::item:selected {
-                background-color: #1E90FF;  /* Electric blue selection */
-                color: #FFFFFF;  /* White text */
+            background-color: #1E90FF;  /* Electric blue selection */
+            color: #FFFFFF;  /* White text */
             }
             QScrollBar:vertical, QScrollBar:horizontal {
-                background-color: #1E1E1E;  /* Dark scrollbar background */
-                border: none;
-                width: 10px;
-                height: 10px;
+            background-color: #1E1E1E;  /* Dark scrollbar background */
+            border: none;
+            width: 10px;
+            height: 10px;
             }
             QScrollBar::handle {
-                background-color: #1E90FF;  /* Electric blue scrollbar handle */
-                border-radius: 5px;
+            background-color: #1E90FF;  /* Electric blue scrollbar handle */
+            border-radius: 5px;
             }
             QScrollBar::handle:hover {
-                background-color: #63B8FF;  /* Lighter blue on hover */
+            background-color: #63B8FF;  /* Lighter blue on hover */
             }
             QMessageBox {
-                background-color: #121212;  /* Dark background for popups */
-                color: #FFFFFF;  /* White text */
+            background-color: #121212;  /* Dark background for popups */
+            color: #FFFFFF;  /* White text */
             }
             QInputDialog {
-                background-color: #121212;  /* Dark background for input dialogs */
-                color: #FFFFFF;  /* White text */
+            background-color: #121212;  /* Dark background for input dialogs */
+            color: #FFFFFF;  /* White text */
             }
             QDialog {
-                background-color: #121212;  /* Dark background for dialogs */
-                color: #FFFFFF;  /* White text */
+            background-color: #121212;  /* Dark background for dialogs */
+            color: #FFFFFF;  /* White text */
             }
             QWidget {
-                background-color: #121212;
-                color: #FFFFFF;
+            background-color: #121212;
+            color: #FFFFFF;
             }
             QListWidget {
-                background-color: #1E1E1E;
-                color: #FFFFFF;
-                border: 1px solid #1E90FF;
-                border-radius: 5px;
+            background-color: #1E1E1E;
+            color: #FFFFFF;
+            border: 1px solid #1E90FF;
+            border-radius: 5px;
             }
             QListWidget::item {
-                color: #FFFFFF;
+            color: #FFFFFF;
             }
             QListWidget::item:selected {
-                background-color: #1E90FF;
-                color: #FFFFFF;
+            background-color: #1E90FF;
+            color: #FFFFFF;
             }
             QListWidget::item:hover {
-                background-color: #1E90FF;
-                color: #FFFFFF;
+            background-color: #1E90FF;
+            color: #FFFFFF;
             }
             QTabWidget::pane {
-                border: 1px solid #1E90FF;
-                border-bottom: none;
-                background: #121212;
+            border: 1px solid #1E90FF;
+            border-bottom: none;
+            background: #121212;
             }
             QTabBar::tab {
-                background: #1E1E1E;
-                color: #FFFFFF;
-                border: 1px solid #1E90FF;
-                border-bottom: none;
-                border-top-left-radius: 5px;
-                border-top-right-radius: 5px;
-                border-bottom-left-radius: 0px;
-                border-bottom-right-radius: 0px;
-                padding: 6px;
-                min-width: 100px;
+            background: #1E1E1E;
+            color: #FFFFFF;
+            border: 1px solid #1E90FF;
+            border-bottom: none;
+            border-top-left-radius: 5px;
+            border-top-right-radius: 5px;
+            border-bottom-left-radius: 0px;
+            border-bottom-right-radius: 0px;
+            padding: 6px;
+            min-width: 100px;
             }
             QTabBar::tab:selected {
-                background: #1E90FF;
-                color: #FFFFFF;
+            background: #1E90FF;
+            color: #FFFFFF;
             }
             QTabBar::tab:hover {
-                background: #63B8FF;
-                color: #FFFFFF;
+            background: #63B8FF;
+            color: #FFFFFF;
             }
 
             QPushButton {
-                background-color: #1E90FF;  /* Electric blue background */
-                color: #FFFFFF;  /* White text */
-                border: none;
-                border-radius: 5px;
-                padding: 5px;
+            background-color: #1E90FF;  /* Electric blue background */
+            color: #FFFFFF;  /* White text */
+            border: none;
+            border-radius: 5px;
+            padding: 5px;
             }
             QPushButton:hover {
-                background-color: #63B8FF;  /* Lighter blue on hover */
+            background-color: #63B8FF;  /* Lighter blue on hover */
             }
         """
         style = style.replace("#1E90FF", str(self.settings['general']['accent_color']))
