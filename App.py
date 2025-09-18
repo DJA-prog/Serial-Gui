@@ -379,11 +379,13 @@ class MainWindow(QMainWindow):
         self.tab_commands()  # Create the commands tab
         self.tab_input_history()  # Create the command history tab
         self.tab_settings()
+        self.tab_virtual_serial()
 
         # Add tables to tabs
         tab_widget.addTab(self.commands_tab, "Commands")
         tab_widget.addTab(self.command_history_tab, "History")
         tab_widget.addTab(self.settings_tab, "Settings")
+        tab_widget.addTab(self.virtual_serial_tab, "Virtual Serial")
 
         left_layout.addWidget(tab_widget)
         self.middle_layout.addLayout(left_layout)
@@ -567,7 +569,6 @@ class MainWindow(QMainWindow):
         # Row 11: custom-baudrate (int)
         custom_baud_rate_item = QTableWidgetItem(str(settings.get("custom-baudrate", 115200)))
         self.settings_table.setItem(11, 1, custom_baud_rate_item)
-
 
     def tab_settings(self) -> None:
 
@@ -798,6 +799,84 @@ class MainWindow(QMainWindow):
             # QMessageBox.information(self, "Settings Reset", "Settings have been reset to defaults. Please restart the application for all changes to take effect.")
 
         reset_button.clicked.connect(reset_to_defaults)
+
+    def tab_virtual_serial(self) -> None:
+        self.virtual_serial_tab: QWidget = QWidget()
+        self.virtual_serial_layout: QVBoxLayout = QVBoxLayout(self.virtual_serial_tab)
+
+        virtual_serial_table = QTableWidget()
+        virtual_serial_table.setRowCount(0)
+        virtual_serial_table.setColumnCount(2)
+        virtual_serial_table.setHorizontalHeaderLabels(["Virtual Serial Path", "Baud Rate"])
+        virtual_serial_table.verticalHeader().setVisible(False)
+        virtual_serial_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        virtual_serial_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        virtual_serial_table.setColumnWidth(0, int(self.left_panel_width * 0.45))
+        virtual_serial_table.setColumnWidth(1, int(self.left_panel_width * 0.50))
+
+        self.virtual_serial_layout.addWidget(virtual_serial_table)
+
+        # Populate custom buttons from virtual_serial
+        # if 'buttons' in self.virtual_serial:
+        #     for key, button in self.virtual_serial['buttons'].items():
+        #         if isinstance(button, dict):
+        #             label = button.get('label', '')
+        #             command = button.get('command', '')
+        #             virtual_serial_table.insertRow(virtual_serial_table.rowCount())
+        #             virtual_serial_table.setItem(virtual_serial_table.rowCount() - 1, 0, QTableWidgetItem(label))
+        #             virtual_serial_table.setItem(virtual_serial_table.rowCount() - 1, 1, QTableWidgetItem(command))
+        
+        # def edit_custom_button(row: int, column: int) -> None:
+        #     keys = ['A', 'B', 'C', 'D', 'E']
+        #     if column == 0:
+        #         # Edit label
+        #         current_label = virtual_serial_table.item(row, 0).text()
+        #         new_label, ok = QInputDialog.getText(self, "Edit Button Label", "Enter new label:", text=current_label)
+        #         if ok and new_label:
+        #             virtual_serial_table.setItem(row, 0, QTableWidgetItem(new_label))
+        #             # Update virtual_serial
+        #             command = virtual_serial_table.item(row, 1).text()
+        #             key = keys[row]
+        #             if key in self.virtual_serial['buttons']:
+        #                 self.virtual_serial['buttons'][key] = {'label': new_label, 'command': command}
+        #                 self.save_virtual_serial()
+        #                 print(self.virtual_serial['buttons'])
+        #     elif column == 1:
+        #         # Edit command
+        #         current_command = virtual_serial_table.item(row, 1).text()
+        #         new_command, ok = QInputDialog.getText(self, "Edit Button Command", "Enter new command:", text=current_command)
+        #         if ok and new_command:
+        #             virtual_serial_table.setItem(row, 1, QTableWidgetItem(new_command))
+        #             # Update virtual_serial
+        #             label = virtual_serial_table.item(row, 0).text()
+        #             key = keys[row]
+        #             if key in self.virtual_serial['buttons']:
+        #                 self.virtual_serial['buttons'][key] = {'label': label, 'command': new_command}
+        #                 self.save_virtual_serial()
+        #                 print(self.virtual_serial['buttons'])
+
+        # virtual_serial_table.cellDoubleClicked.connect(edit_custom_button)
+
+
+        # Add a clear all button
+        add_virtual_serial_button = QPushButton("Add Virtual Serial")
+        add_virtual_serial_button.setToolTip("Add a new virtual_serial entry")
+        self.virtual_serial_layout.addWidget(add_virtual_serial_button)
+
+        clear_button = QPushButton("Clear All Virtual Serials")
+        clear_button.setToolTip("Remove all virtual_serial entries")
+        self.virtual_serial_layout.addWidget(clear_button)
+
+        def clear_all_virtual_serials() -> None:
+            self.virtual_serial['buttons'] = {}
+            virtual_serial_table.setRowCount(0)
+            # Update table
+            # self.save_virtual_serial()
+            self.set_style()
+            # self.tab_virtual_serial_set()
+            # QMessageBox.information(self, "virtual_serial Reset", "virtual_serial have been reset to defaults. Please restart the application for all changes to take effect.")
+
+        clear_button.clicked.connect(clear_all_virtual_serials)
 
     def open_configurations_directory(self, config_path: Path) -> None:
         """Opens the configuration directory in the system's file manager."""
