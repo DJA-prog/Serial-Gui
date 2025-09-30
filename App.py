@@ -804,79 +804,94 @@ class MainWindow(QMainWindow):
         self.virtual_serial_tab: QWidget = QWidget()
         self.virtual_serial_layout: QVBoxLayout = QVBoxLayout(self.virtual_serial_tab)
 
-        virtual_serial_table = QTableWidget()
-        virtual_serial_table.setRowCount(0)
-        virtual_serial_table.setColumnCount(2)
-        virtual_serial_table.setHorizontalHeaderLabels(["Virtual Serial Path", "Baud Rate"])
-        virtual_serial_table.verticalHeader().setVisible(False)
-        virtual_serial_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        virtual_serial_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        virtual_serial_table.setColumnWidth(0, int(self.left_panel_width * 0.45))
-        virtual_serial_table.setColumnWidth(1, int(self.left_panel_width * 0.50))
+        self.virtual_serial_table = QTableWidget()
+        self.virtual_serial_table.setRowCount(0)
+        self.virtual_serial_table.setColumnCount(2)
+        self.virtual_serial_table.setHorizontalHeaderLabels(["Virtual Serial Path", "Baud Rate"])
+        self.virtual_serial_table.verticalHeader().setVisible(False)
+        self.virtual_serial_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.virtual_serial_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.virtual_serial_table.setColumnWidth(0, int(self.left_panel_width * 0.45))
+        self.virtual_serial_table.setColumnWidth(1, int(self.left_panel_width * 0.50))
 
-        self.virtual_serial_layout.addWidget(virtual_serial_table)
+        self.virtual_serial_layout.addWidget(self.virtual_serial_table)
 
-        # Populate custom buttons from virtual_serial
-        # if 'buttons' in self.virtual_serial:
-        #     for key, button in self.virtual_serial['buttons'].items():
-        #         if isinstance(button, dict):
-        #             label = button.get('label', '')
-        #             command = button.get('command', '')
-        #             virtual_serial_table.insertRow(virtual_serial_table.rowCount())
-        #             virtual_serial_table.setItem(virtual_serial_table.rowCount() - 1, 0, QTableWidgetItem(label))
-        #             virtual_serial_table.setItem(virtual_serial_table.rowCount() - 1, 1, QTableWidgetItem(command))
-        
-        # def edit_custom_button(row: int, column: int) -> None:
-        #     keys = ['A', 'B', 'C', 'D', 'E']
-        #     if column == 0:
-        #         # Edit label
-        #         current_label = virtual_serial_table.item(row, 0).text()
-        #         new_label, ok = QInputDialog.getText(self, "Edit Button Label", "Enter new label:", text=current_label)
-        #         if ok and new_label:
-        #             virtual_serial_table.setItem(row, 0, QTableWidgetItem(new_label))
-        #             # Update virtual_serial
-        #             command = virtual_serial_table.item(row, 1).text()
-        #             key = keys[row]
-        #             if key in self.virtual_serial['buttons']:
-        #                 self.virtual_serial['buttons'][key] = {'label': new_label, 'command': command}
-        #                 self.save_virtual_serial()
-        #                 print(self.virtual_serial['buttons'])
-        #     elif column == 1:
-        #         # Edit command
-        #         current_command = virtual_serial_table.item(row, 1).text()
-        #         new_command, ok = QInputDialog.getText(self, "Edit Button Command", "Enter new command:", text=current_command)
-        #         if ok and new_command:
-        #             virtual_serial_table.setItem(row, 1, QTableWidgetItem(new_command))
-        #             # Update virtual_serial
-        #             label = virtual_serial_table.item(row, 0).text()
-        #             key = keys[row]
-        #             if key in self.virtual_serial['buttons']:
-        #                 self.virtual_serial['buttons'][key] = {'label': label, 'command': new_command}
-        #                 self.save_virtual_serial()
-        #                 print(self.virtual_serial['buttons'])
+        # Load saved virtual serials from YAML
+        yaml_path = os.path.join(self.app_configs_path, "virtual_serials.yaml")
+        if os.path.exists(yaml_path):
+            try:
+                with open(yaml_path, "r") as f:
+                    entries = yaml.safe_load(f)
+                if isinstance(entries, list):
+                    for entry in entries:
+                        path = entry.get("path", "")
+                        baud_rate = entry.get("baud_rate", "")
+                        row = self.virtual_serial_table.rowCount()
+                        self.virtual_serial_table.insertRow(row)
+                        self.virtual_serial_table.setItem(row, 0, QTableWidgetItem(str(path)))
+                        self.virtual_serial_table.setItem(row, 1, QTableWidgetItem(str(baud_rate)))
+            except Exception as e:
+                QMessageBox.critical(self, "Load Error", f"Failed to load virtual serials: {e}")
 
-        # virtual_serial_table.cellDoubleClicked.connect(edit_custom_button)
-
-
+       
         # Add a clear all button
         add_virtual_serial_button = QPushButton("Add Virtual Serial")
         add_virtual_serial_button.setToolTip("Add a new virtual_serial entry")
+        add_virtual_serial_button.clicked.connect(self.add_virtual_serial)
         self.virtual_serial_layout.addWidget(add_virtual_serial_button)
 
         clear_button = QPushButton("Clear All Virtual Serials")
         clear_button.setToolTip("Remove all virtual_serial entries")
+        clear_button.clicked.connect(self.clear_virtual_serials)
         self.virtual_serial_layout.addWidget(clear_button)
 
-        def clear_all_virtual_serials() -> None:
-            self.virtual_serial['buttons'] = {}
-            virtual_serial_table.setRowCount(0)
-            # Update table
-            # self.save_virtual_serial()
-            self.set_style()
-            # self.tab_virtual_serial_set()
-            # QMessageBox.information(self, "virtual_serial Reset", "virtual_serial have been reset to defaults. Please restart the application for all changes to take effect.")
 
-        clear_button.clicked.connect(clear_all_virtual_serials)
+    def add_virtual_serial(self) -> None:
+        path, ok = QInputDialog.getText(self, "Add Virtual Serial", "Enter virtual serial path (e.g., /dev/pts/3 or COM5):")
+        if not ok or not path:
+            return
+
+        baud_rate, ok = QInputDialog.getText(self, "Add Virtual Serial", "Enter baud rate (e.g., 115200):")
+        if not ok or not baud_rate:
+            return
+
+        baud_rate = abs(int(baud_rate))
+
+        # Update table
+        self.virtual_serial_table.insertRow(self.virtual_serial_table.rowCount())
+        self.virtual_serial_table.setItem(self.virtual_serial_table.rowCount() - 1, 0, QTableWidgetItem(path))
+        self.virtual_serial_table.setItem(self.virtual_serial_table.rowCount() - 1, 1, QTableWidgetItem(str(baud_rate)))
+
+        # Save to YAML file
+        yaml_path = os.path.join(self.app_configs_path, "virtual_serials.yaml")
+        entries = []
+        # Read existing entries from table
+        for row in range(self.virtual_serial_table.rowCount()):
+            entry_path = self.virtual_serial_table.item(row, 0).text()
+            entry_baud = int(self.virtual_serial_table.item(row, 1).text())
+            entries.append({'path': entry_path, 'baud_rate': entry_baud})
+        try:
+            with open(yaml_path, "w") as f:
+                yaml.dump(entries, f, default_flow_style=False)
+        except Exception as e:
+            QMessageBox.critical(self, "Save Error", f"Failed to save virtual serials: {e}")
+
+    def clear_virtual_serials(self) -> None:
+        reply = QMessageBox.question(
+            self,
+            "Clear All Virtual Serials",
+            "Are you sure you want to clear all virtual serial entries? This cannot be undone.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            self.virtual_serial_table.setRowCount(0)
+            yaml_path = os.path.join(self.app_configs_path, "virtual_serials.yaml")
+            try:
+                with open(yaml_path, "w") as f:
+                    yaml.dump([], f, default_flow_style=False)
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to clear virtual serials file: {e}")
 
     def open_configurations_directory(self, config_path: Path) -> None:
         """Opens the configuration directory in the system's file manager."""
