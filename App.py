@@ -138,16 +138,21 @@ class MainWindow(QMainWindow):
                 }, 
             'general': {
                 'accent_color': '#1E90FF', 
-                'auto_clear_output': False, 
+                'auto_clear_output': False,
+                'auto_reconnect': False,
                 'data_bits': 8,
                 'display_format': 'text',
+                'dtr_state': False,
                 'flow_control': 'None', 
                 'font_color': '#FFFFFF',
-                'hover_color': '#63B8FF', 
+                'hover_color': '#63B8FF',
+                'last_serial_port': '',
+                'last_tab_index': 0,
                 'maximized': True,
                 'max_output_lines': 10000,
                 'open_mode': 'R/W', 
                 'parity': 'None',
+                'rts_state': False,
                 'show_timestamps': False,
                 'stop_bits': 1, 
                 'tx_line_ending': 'LN',
@@ -395,11 +400,16 @@ class MainWindow(QMainWindow):
 
         # Add DTR and RTS checkboxes
         self.dtr_checkbox = QCheckBox("DTR")
-        self.dtr_checkbox.setChecked(False)  # Default selected
+        self.dtr_checkbox.setChecked(self.settings.get('general', {}).get('dtr_state', False))
         self.rts_checkbox = QCheckBox("RTS")
-        self.rts_checkbox.setChecked(False)  # Default selected
+        self.rts_checkbox.setChecked(self.settings.get('general', {}).get('rts_state', False))
         self.auto_reconnect_checkbox = QCheckBox("Auto Reconnect")
-        self.auto_reconnect_checkbox.setChecked(False)  # Default selected
+        self.auto_reconnect_checkbox.setChecked(self.settings.get('general', {}).get('auto_reconnect', False))
+        
+        # Connect state change handlers to save settings
+        self.dtr_checkbox.stateChanged.connect(lambda: self.save_checkbox_state('dtr_state', self.dtr_checkbox.isChecked()))
+        self.rts_checkbox.stateChanged.connect(lambda: self.save_checkbox_state('rts_state', self.rts_checkbox.isChecked()))
+        self.auto_reconnect_checkbox.stateChanged.connect(lambda: self.save_checkbox_state('auto_reconnect', self.auto_reconnect_checkbox.isChecked()))
 
         top_layout.addWidget(port_label)
         top_layout.addWidget(self.port_combo)
@@ -420,20 +430,34 @@ class MainWindow(QMainWindow):
 
         left_layout = QVBoxLayout()
 
-        tab_widget = QTabWidget()
-        tab_widget.setFixedWidth(self.left_panel_width)
+        self.tab_widget = QTabWidget()
+        self.tab_widget.setFixedWidth(self.left_panel_width)
 
         self.tab_commands()  # Create the commands tab
         self.tab_input_history()  # Create the command history tab
         self.tab_settings()
 
         # Add tables to tabs
-        tab_widget.addTab(self.commands_tab, "Commands")
-        tab_widget.addTab(self.command_history_tab, "History")
-        tab_widget.addTab(self.settings_tab, "Settings")
+        self.tab_widget.addTab(self.commands_tab, "Commands")
+        self.tab_widget.addTab(self.command_history_tab, "History")
+        self.tab_widget.addTab(self.settings_tab, "Settings")
+        
+        # Restore last active tab
+        last_tab = self.settings.get('general', {}).get('last_tab_index', 0)
+        self.tab_widget.setCurrentIndex(last_tab)
+        
+        # Connect tab change handler to save current tab
+        self.tab_widget.currentChanged.connect(self.save_current_tab)
 
-        left_layout.addWidget(tab_widget)
+        left_layout.addWidget(self.tab_widget)
         self.middle_layout.addLayout(left_layout)
+        
+        # Restore last serial port if it exists
+        last_port = self.settings.get('general', {}).get('last_serial_port', '')
+        if last_port:
+            index = self.port_combo.findText(last_port)
+            if index >= 0:
+                self.port_combo.setCurrentIndex(index)
 
     def load_yaml_commands(self, filepath: str) -> dict:
         with open(filepath, "r") as f:
@@ -965,6 +989,20 @@ class MainWindow(QMainWindow):
 
         self.main_layout.addLayout(bottom_layout)
 
+    def save_checkbox_state(self, setting_name: str, value: bool) -> None:
+        """
+        Saves checkbox state to settings.
+        """
+        self.settings['general'][setting_name] = value
+        self.save_settings()
+
+    def save_current_tab(self, index: int) -> None:
+        """
+        Saves the current tab index to settings.
+        """
+        self.settings['general']['last_tab_index'] = index
+        self.save_settings()
+
     def show_output_context_menu(self, pos) -> None:
         """
         Shows a context menu for the output display with options to toggle hex/text and timestamps.
@@ -1382,6 +1420,10 @@ class MainWindow(QMainWindow):
         if self.settings.get("general", {}).get("last-baudrate", 115200) != baud_rate:
             self.settings["general"]["last-baudrate"] = baud_rate
             self.save_settings()
+        
+        # Save last connected serial port
+        self.settings["general"]["last_serial_port"] = port
+        self.save_settings()
 
         if baud_rate == "Custom":
             baud_rate = self.settings.get("general", {}).get("custom-baudrate", 115200)
