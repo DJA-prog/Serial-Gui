@@ -1359,13 +1359,23 @@ class MainWindow(QMainWindow):
 
         # Auto-reconnect if needed
         if self.auto_reconnect_checkbox.isChecked():
-            port = self.port_combo.currentText()
-            if port in current_ports and (not self.serial_port or not self.serial_port.is_open):
-                self.print_to_display("Attempting auto-reconnect...")
-                try:
-                    self.connect_serial()
-                except Exception as e:
-                    self.print_to_display(f"Auto-reconnect failed: {e}")
+            # Use the last connected port from settings, not the current combo selection
+            last_port = self.settings.get('general', {}).get('last_serial_port', '')
+            
+            # Only attempt reconnect if:
+            # 1. We have a saved port
+            # 2. The saved port is available in current ports
+            # 3. Serial port is not already open
+            if last_port and last_port in current_ports and (not self.serial_port or not self.serial_port.is_open):
+                # Set the combo box to the correct port before reconnecting
+                index = self.port_combo.findText(last_port)
+                if index >= 0:
+                    self.port_combo.setCurrentIndex(index)
+                    self.print_to_display(f"Attempting auto-reconnect to {last_port}...")
+                    try:
+                        self.connect_serial()
+                    except Exception as e:
+                        self.print_to_display(f"Auto-reconnect failed: {e}")
 
     def toggle_connection(self) -> None:
         if self.serial_port and self.serial_port.is_open:
