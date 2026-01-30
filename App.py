@@ -13,7 +13,7 @@ from datetime import datetime
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QListWidgetItem,
     QTextEdit, QLineEdit, QLabel, QComboBox, QMessageBox, QTableWidget, QTableWidgetItem, QInputDialog, QDialog, QListWidget, QCheckBox,
-    QSpinBox, QTabWidget, QFileDialog
+    QSpinBox, QTabWidget, QFileDialog, QMenu, QAction
 )
 from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QMouseEvent, QCloseEvent
@@ -84,7 +84,7 @@ class MainWindow(QMainWindow):
         self.app_configs_path = get_config_dir("SerialCommunicationMonitor")
         
         self.settings = {
-            'buttons': {
+            'quick_buttons': {
                 'A': {'command': '', 'label': '', 'tooltip': ''}, 
                 'B': {'command': '', 'label': '', 'tooltip': ''}, 
                 'C': {'command': '', 'label': '', 'tooltip': ''}, 
@@ -146,6 +146,9 @@ class MainWindow(QMainWindow):
         self.connected_time_seconds = 0
         self.connected_time_timer = QTimer()
         self.connected_time_timer.timeout.connect(self.update_connected_time)
+
+        # Store button references for later updates
+        self.custom_buttons = {}
 
         # Main layout
         self.main_layout = QVBoxLayout()
@@ -419,7 +422,7 @@ class MainWindow(QMainWindow):
         commands_dir = os.path.join(self.app_configs_path, "commands")
         
         if not os.path.exists(commands_dir):
-            os.makedirs(commands_dir)
+            os.makedirs(commands_dir, exist_ok=True)
 
         yaml_files = [f for f in os.listdir(commands_dir) if f.endswith(".yaml")]
         yaml_files.sort()
@@ -722,62 +725,6 @@ class MainWindow(QMainWindow):
 
         self.settings_table.cellDoubleClicked.connect(edit_setting)
 
-        custom_buttons_title = QLabel("Custom Bottom Bar Butttons")
-        self.settings_layout.addWidget(custom_buttons_title)
-
-        custom_buttons_table = QTableWidget()
-        custom_buttons_table.setRowCount(0)
-        custom_buttons_table.setColumnCount(2)
-        custom_buttons_table.setHorizontalHeaderLabels(["Label", "Command"])
-        custom_buttons_table.verticalHeader().setVisible(False)
-        custom_buttons_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        custom_buttons_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        custom_buttons_table.setColumnWidth(0, int(self.left_panel_width * 0.45))
-        custom_buttons_table.setColumnWidth(1, int(self.left_panel_width * 0.50))
-
-        self.settings_layout.addWidget(custom_buttons_table)
-
-        # Populate custom buttons from settings
-        if 'buttons' in self.settings:
-            for key, button in self.settings['buttons'].items():
-                if isinstance(button, dict):
-                    label = button.get('label', '')
-                    command = button.get('command', '')
-                    custom_buttons_table.insertRow(custom_buttons_table.rowCount())
-                    custom_buttons_table.setItem(custom_buttons_table.rowCount() - 1, 0, QTableWidgetItem(label))
-                    custom_buttons_table.setItem(custom_buttons_table.rowCount() - 1, 1, QTableWidgetItem(command))
-        
-        def edit_custom_button(row: int, column: int) -> None:
-            keys = ['A', 'B', 'C', 'D', 'E']
-            if column == 0:
-                # Edit label
-                current_label = custom_buttons_table.item(row, 0).text()
-                new_label, ok = QInputDialog.getText(self, "Edit Button Label", "Enter new label:", text=current_label)
-                if ok and new_label:
-                    custom_buttons_table.setItem(row, 0, QTableWidgetItem(new_label))
-                    # Update settings
-                    command = custom_buttons_table.item(row, 1).text()
-                    key = keys[row]
-                    if key in self.settings['buttons']:
-                        self.settings['buttons'][key] = {'label': new_label, 'command': command}
-                        self.save_settings()
-                        print(self.settings['buttons'])
-            elif column == 1:
-                # Edit command
-                current_command = custom_buttons_table.item(row, 1).text()
-                new_command, ok = QInputDialog.getText(self, "Edit Button Command", "Enter new command:", text=current_command)
-                if ok and new_command:
-                    custom_buttons_table.setItem(row, 1, QTableWidgetItem(new_command))
-                    # Update settings
-                    label = custom_buttons_table.item(row, 0).text()
-                    key = keys[row]
-                    if key in self.settings['buttons']:
-                        self.settings['buttons'][key] = {'label': label, 'command': new_command}
-                        self.save_settings()
-                        print(self.settings['buttons'])
-
-        custom_buttons_table.cellDoubleClicked.connect(edit_custom_button)
-
         # Add a button to open a file manager to select a custom commands directory
         commands_button = QPushButton("Open Configurations Directory")
         commands_button.setToolTip("Open the directory where command YAML files are stored")
@@ -866,17 +813,21 @@ class MainWindow(QMainWindow):
         # Predefined commands
         predefined_layout = QHBoxLayout()
 
-        for key, button in self.settings["buttons"].items():
+        for key, button in self.settings["quick_buttons"].items():
             if isinstance(button, dict):
                 label = button.get('label', '')
                 tooltip = button.get('tooltip', '')
                 command = button.get('command', '')
 
-                btn = QPushButton(label)
+                btn = QPushButton(label if label else "---")
                 btn.setToolTip(tooltip)
-                if not label:
-                    btn.setDisabled(True)
-                btn.clicked.connect(lambda _, cmd=command: self.send_predefined_command(cmd))
+                btn.setContextMenuPolicy(Qt.CustomContextMenu)
+                btn.customContextMenuRequested.connect(lambda pos, k=key: self.show_button_context_menu(pos, k))
+                
+                # Always keep button enabled so context menu works, but connect handler that checks for command
+                btn.clicked.connect(lambda _, k=key: self.execute_button_command(k))
+                
+                self.custom_buttons[key] = btn
                 predefined_layout.addWidget(btn)
 
 
@@ -915,6 +866,139 @@ class MainWindow(QMainWindow):
         bottom_layout.addLayout(status_layout)
 
         self.main_layout.addLayout(bottom_layout)
+
+    def execute_button_command(self, key: str) -> None:
+        """
+        Executes the command associated with a quick button key, if it exists.
+        """
+        button_settings = self.settings['quick_buttons'].get(key, {})
+        command = button_settings.get('command', '')
+        if command:
+            self.send_predefined_command(command)
+
+    def show_button_context_menu(self, pos, key: str) -> None:
+        """
+        Shows a context menu for the custom buttons with Edit and Clear options.
+        """
+        btn = self.custom_buttons.get(key)
+        if not btn:
+            return
+            
+        menu = QMenu(self)
+        edit_action = QAction("Edit", self)
+        clear_action = QAction("Clear", self)
+        
+        edit_action.triggered.connect(lambda: self.edit_button(key))
+        clear_action.triggered.connect(lambda: self.clear_button_functionality(key))
+        
+        menu.addAction(edit_action)
+        menu.addAction(clear_action)
+        
+        menu.exec_(btn.mapToGlobal(pos))
+
+    def edit_button(self, key: str) -> None:
+        """
+        Opens a dialog to edit the quick button's name and command.
+        """
+        current_settings = self.settings['quick_buttons'].get(key, {})
+        current_label = current_settings.get('label', '')
+        current_command = current_settings.get('command', '')
+        
+        # Create a custom dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Edit Quick Button")
+        dialog.setModal(True)
+        dialog_layout = QVBoxLayout(dialog)
+        
+        # Description label
+        description_label = QLabel("Configure the quick button:")
+        description_label.setStyleSheet("color: #63B8FF; font-weight: bold;")
+        dialog_layout.addWidget(description_label)
+        
+        # Name field
+        name_label = QLabel("Button Name:")
+        name_label.setToolTip("The text to display on the button")
+        name_input = QLineEdit(current_label)
+        name_input.setPlaceholderText("Enter button text (e.g., 'Status', 'Reset')")
+        name_input.setToolTip("The text to display on the button")
+        dialog_layout.addWidget(name_label)
+        dialog_layout.addWidget(name_input)
+        
+        # Command field
+        command_label = QLabel("Command:")
+        command_label.setToolTip("The command to execute when the button is clicked")
+        command_input = QLineEdit(current_command)
+        command_input.setPlaceholderText("Enter command (e.g., 'AT+CSQ', 'AT+CPIN?')")
+        command_input.setToolTip("The command to execute when the button is clicked")
+        dialog_layout.addWidget(command_label)
+        dialog_layout.addWidget(command_input)
+        
+        # Tooltip field
+        current_tooltip = current_settings.get('tooltip', '')
+        tooltip_label = QLabel("Tooltip:")
+        tooltip_label.setToolTip("The tooltip to show when hovering over the button")
+        tooltip_input = QLineEdit(current_tooltip)
+        tooltip_input.setPlaceholderText("Enter tooltip description (optional)")
+        tooltip_input.setToolTip("The tooltip to show when hovering over the button")
+        dialog_layout.addWidget(tooltip_label)
+        dialog_layout.addWidget(tooltip_input)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        ok_button = QPushButton("OK")
+        cancel_button = QPushButton("Cancel")
+        button_layout.addWidget(ok_button)
+        button_layout.addWidget(cancel_button)
+        dialog_layout.addLayout(button_layout)
+        
+        def on_ok():
+            new_label = name_input.text().strip()
+            new_command = command_input.text().strip()
+            new_tooltip = tooltip_input.text().strip()
+            
+            # Update settings
+            self.settings['quick_buttons'][key] = {
+                'label': new_label,
+                'command': new_command,
+                'tooltip': new_tooltip
+            }
+            self.save_settings()
+            
+            # Update button
+            btn = self.custom_buttons.get(key)
+            if btn:
+                if new_label and new_command:
+                    btn.setText(new_label)
+                else:
+                    btn.setText("---")
+                btn.setToolTip(new_tooltip)
+            
+            dialog.accept()
+        
+        def on_cancel():
+            dialog.reject()
+        
+        ok_button.clicked.connect(on_ok)
+        cancel_button.clicked.connect(on_cancel)
+        
+        dialog.exec_()
+
+    def clear_button_functionality(self, key: str) -> None:
+        """
+        Clears the quick button functionality, sets text to '---'.
+        """
+        # Update settings
+        self.settings['quick_buttons'][key] = {
+            'label': '',
+            'command': '',
+            'tooltip': ''
+        }
+        self.save_settings()
+        
+        # Update button
+        btn = self.custom_buttons.get(key)
+        if btn:
+            btn.setText("---")
 
     def save_output(self) -> None:
         """
@@ -966,6 +1050,10 @@ class MainWindow(QMainWindow):
                 settings = yaml.safe_load(f)
                 # print(f"Loaded settings: {settings}")
             if settings:
+                # Migrate from old 'buttons' to 'quick_buttons' format
+                if 'buttons' in settings and 'quick_buttons' not in settings:
+                    settings['quick_buttons'] = settings.pop('buttons')
+                
                 self.settings = settings
                 # print(f"Settings loaded: {self.settings}")
             
