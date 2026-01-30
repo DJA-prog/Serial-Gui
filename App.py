@@ -143,7 +143,8 @@ class MainWindow(QMainWindow):
                 'flow_control': 'None', 
                 'font_color': '#FFFFFF',
                 'hover_color': '#63B8FF', 
-                'maximized': True, 
+                'maximized': True,
+                'max_output_lines': 10000,
                 'open_mode': 'R/W', 
                 'parity': 'None', 
                 'stop_bits': 1, 
@@ -611,9 +612,12 @@ class MainWindow(QMainWindow):
         # Row 11: reveal_hidden_char (bool)
         reveal_hidden_char_item = QTableWidgetItem(str(settings.get("reveal_hidden_char", False)))
         self.settings_table.setItem(11, 1, reveal_hidden_char_item)
-        # Row 12: custom-baudrate (int)
+        # Row 12: max_output_lines (int)
+        max_output_lines_item = QTableWidgetItem(str(settings.get("max_output_lines", 10000)))
+        self.settings_table.setItem(12, 1, max_output_lines_item)
+        # Row 13: custom-baudrate (int)
         custom_baud_rate_item = QTableWidgetItem(str(settings.get("custom-baudrate", 115200)))
-        self.settings_table.setItem(12, 1, custom_baud_rate_item)
+        self.settings_table.setItem(13, 1, custom_baud_rate_item)
 
 
     def tab_settings(self) -> None:
@@ -624,7 +628,7 @@ class MainWindow(QMainWindow):
         # Settings table
         self.settings_table = QTableWidget()
         self.settings_table.setToolTip("Double-click a value to edit. For colors, a color picker will appear.")
-        self.settings_table.setRowCount(13)
+        self.settings_table.setRowCount(14)
         self.settings_table.setColumnCount(2)
         self.settings_table.setHorizontalHeaderLabels(["Setting", "Value"])
         self.settings_table.verticalHeader().setVisible(False)
@@ -648,7 +652,8 @@ class MainWindow(QMainWindow):
         self.settings_table.setItem(9, 0, QTableWidgetItem("Flow Control"))
         self.settings_table.setItem(10, 0, QTableWidgetItem("Open Mode"))
         self.settings_table.setItem(11, 0, QTableWidgetItem("Reveal Hidden Char"))
-        self.settings_table.setItem(12, 0, QTableWidgetItem("Custom Baud Rate"))
+        self.settings_table.setItem(12, 0, QTableWidgetItem("Max Output Lines"))
+        self.settings_table.setItem(13, 0, QTableWidgetItem("Custom Baud Rate"))
 
         self.tab_settings_set()
 
@@ -770,6 +775,16 @@ class MainWindow(QMainWindow):
                     general["custom-baudrate"] = new_value
                     self.save_settings()
 
+            elif key == "Max Output Lines":
+                current_value = str(general.get("max_output_lines", 10000))
+                new_value, ok = QInputDialog.getText(self, "Edit Max Output Lines", "Enter maximum number of lines to keep in output display:\n(Prevents unlimited memory growth)", text=current_value)
+                if ok and new_value:
+                    new_value = max(100, abs(int(new_value)))  # Minimum 100 lines
+                    self.settings_table.setItem(row, 1, QTableWidgetItem(str(new_value)))
+                    general["max_output_lines"] = new_value
+                    self.response_display.document().setMaximumBlockCount(new_value)
+                    self.save_settings()
+
         self.settings_table.cellDoubleClicked.connect(edit_setting)
 
         # Add a button to open a file manager to select a custom commands directory
@@ -877,6 +892,8 @@ class MainWindow(QMainWindow):
         # Right layout: Response display
         self.response_display = QTextEdit()
         self.response_display.setReadOnly(True)
+        max_lines = self.settings.get('general', {}).get('max_output_lines', 10000)
+        self.response_display.document().setMaximumBlockCount(max_lines)
         self.middle_layout.addWidget(self.response_display)
 
     def create_bottom_panel(self) -> None:
