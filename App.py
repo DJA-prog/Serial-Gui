@@ -139,14 +139,16 @@ class MainWindow(QMainWindow):
             'general': {
                 'accent_color': '#1E90FF', 
                 'auto_clear_output': False, 
-                'data_bits': 8, 
+                'data_bits': 8,
+                'display_format': 'text',
                 'flow_control': 'None', 
                 'font_color': '#FFFFFF',
                 'hover_color': '#63B8FF', 
                 'maximized': True,
                 'max_output_lines': 10000,
                 'open_mode': 'R/W', 
-                'parity': 'None', 
+                'parity': 'None',
+                'show_timestamps': False,
                 'stop_bits': 1, 
                 'tx_line_ending': 'LN',
                 'reveal-hidden-char': False,
@@ -894,6 +896,8 @@ class MainWindow(QMainWindow):
         self.response_display.setReadOnly(True)
         max_lines = self.settings.get('general', {}).get('max_output_lines', 10000)
         self.response_display.document().setMaximumBlockCount(max_lines)
+        self.response_display.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.response_display.customContextMenuRequested.connect(self.show_output_context_menu)
         self.middle_layout.addWidget(self.response_display)
 
     def create_bottom_panel(self) -> None:
@@ -960,6 +964,72 @@ class MainWindow(QMainWindow):
         bottom_layout.addLayout(status_layout)
 
         self.main_layout.addLayout(bottom_layout)
+
+    def show_output_context_menu(self, pos) -> None:
+        """
+        Shows a context menu for the output display with options to toggle hex/text and timestamps.
+        """
+        menu = QMenu(self)
+        
+        # Copy and Select All actions
+        copy_action = QAction("Copy", self)
+        copy_action.triggered.connect(self.response_display.copy)
+        copy_action.setEnabled(self.response_display.textCursor().hasSelection())
+        
+        select_all_action = QAction("Select All", self)
+        select_all_action.triggered.connect(self.response_display.selectAll)
+        
+        menu.addAction(copy_action)
+        menu.addAction(select_all_action)
+        menu.addSeparator()
+        
+        # Display format toggle
+        current_format = self.settings.get('general', {}).get('display_format', 'text')
+        if current_format == 'text':
+            format_action = QAction("Switch to Hex Display", self)
+            format_action.triggered.connect(lambda: self.toggle_display_format('hex'))
+        else:
+            format_action = QAction("Switch to Text Display", self)
+            format_action.triggered.connect(lambda: self.toggle_display_format('text'))
+        
+        # Timestamp toggle
+        show_timestamps = self.settings.get('general', {}).get('show_timestamps', False)
+        if show_timestamps:
+            timestamp_action = QAction("Hide Timestamps", self)
+            timestamp_action.triggered.connect(lambda: self.toggle_timestamps(False))
+        else:
+            timestamp_action = QAction("Show Timestamps", self)
+            timestamp_action.triggered.connect(lambda: self.toggle_timestamps(True))
+        
+        menu.addAction(format_action)
+        menu.addAction(timestamp_action)
+        
+        menu.exec_(self.response_display.mapToGlobal(pos))
+
+    def toggle_display_format(self, new_format: str) -> None:
+        """
+        Toggles between text and hex display format.
+        """
+        self.settings['general']['display_format'] = new_format
+        self.save_settings()
+        QMessageBox.information(
+            self,
+            "Display Format Changed",
+            f"Display format changed to {new_format.upper()}.\nNew messages will be displayed in {new_format.upper()} format."
+        )
+
+    def toggle_timestamps(self, show: bool) -> None:
+        """
+        Toggles timestamp display for output messages.
+        """
+        self.settings['general']['show_timestamps'] = show
+        self.save_settings()
+        status = "enabled" if show else "disabled"
+        QMessageBox.information(
+            self,
+            "Timestamp Display Changed",
+            f"Timestamps have been {status}.\nNew messages will {'include' if show else 'not include'} timestamps."
+        )
 
     def execute_button_command(self, key: str) -> None:
         """
@@ -1169,8 +1239,44 @@ class MainWindow(QMainWindow):
         return [port.device for port in ports if "ttyS" not in port.device]
 
     def print_to_display(self, message: str) -> None:
-        if self.settings.get("general", {}).get("reveal_hidden_char", False):
-            message = self.reveal_hidden_characters(message)
+        # Store original message for processing
+        original_message = message
+        timestamp_prefix = ""
+        flow_indicator = ""
+        
+        # Add timestamp if enabled
+        if self.settings.get("general", {}).get("show_timestamps", False):
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]  # milliseconds
+            timestamp_prefix = f"[{timestamp}] "
+        
+        # Extract flow indicator (< or >) if present
+        if original_message.startswith("< "):
+            flow_indicator = "< "
+            original_message = original_message[2:]
+        elif original_message.startswith("> "):
+            flow_indicator = "> "
+            original_message = original_message[2:]
+        
+        # Convert to hex if enabled
+        display_format = self.settings.get("general", {}).get("display_format", "text")
+        if display_format == "hex":
+            # Convert only the message content to hex
+            try:
+                hex_representation = ' '.join(f'{ord(c):02X}' for c in original_message.strip())
+                message = f"{timestamp_prefix}{flow_indicator}{hex_representation}"
+            except:
+                # If conversion fails, keep original with timestamp and flow indicator
+                message = f"{timestamp_prefix}{flow_indicator}{original_message}"
+        else:
+            # Text mode - apply reveal hidden characters if enabled
+            if self.settings.get("general", {}).get("reveal_hidden_char", False):
+                original_message = self.reveal_hidden_characters(flow_indicator + original_message)
+                # Remove flow indicator as it was added back by reveal_hidden_characters
+                if original_message.startswith(flow_indicator):
+                    original_message = original_message[len(flow_indicator):]
+            message = f"{timestamp_prefix}{flow_indicator}{original_message}"
+        
         self.response_display.append(message.strip())
 
     def reveal_hidden_characters(self, message: str) -> str:
