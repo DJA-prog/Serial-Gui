@@ -42,12 +42,18 @@ class HistoryLineEdit(QLineEdit):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.parent_window = parent  # so we can access parent's history list
+        self.last_enter_time = 0  # Track time of last enter press for double-enter detection
+        self.double_enter_threshold = 500  # milliseconds
 
     def keyPressEvent(self, a0) -> None:
         if self.parent_window is not None:
             if a0.key() == Qt.Key.Key_Up:
-                if self.parent_window.history_index > 0:
-                    if self.parent_window.history_index == len(self.parent_window.history):
+                # Limit navigation to last 10 history entries
+                history_length = len(self.parent_window.history)
+                start_index = max(0, history_length - 10)
+                
+                if self.parent_window.history_index > start_index:
+                    if self.parent_window.history_index == history_length:
                         self.parent_window.current_text = self.text()
                     self.parent_window.history_index -= 1
                     self.setText(self.parent_window.history[self.parent_window.history_index])
@@ -58,8 +64,35 @@ class HistoryLineEdit(QLineEdit):
                 elif self.parent_window.history_index == len(self.parent_window.history) - 1:
                     self.parent_window.history_index += 1
                     self.setText(self.parent_window.current_text)
+            elif a0.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                # Check for double-enter on empty input
+                import time
+                current_time = int(time.time() * 1000)  # milliseconds
+                
+                if not self.text().strip():
+                    # Input is empty
+                    if current_time - self.last_enter_time < self.double_enter_threshold:
+                        # Double enter detected - get and send last command
+                        if self.parent_window.history:
+                            last_command = self.parent_window.history[-1]
+                            self.setText(last_command)
+                            # Let the parent handle the send
+                            super().keyPressEvent(a0)
+                            self.last_enter_time = 0  # Reset to prevent triple-enter issues
+                        else:
+                            # No history, do nothing
+                            self.last_enter_time = 0
+                    else:
+                        # First enter on empty input - just record time, don't send
+                        self.last_enter_time = current_time
+                else:
+                    # Input has text - send normally
+                    self.last_enter_time = 0
+                    super().keyPressEvent(a0)
             else:
                 super().keyPressEvent(a0)
+        else:
+            super().keyPressEvent(a0)
 
 class MainWindow(QMainWindow):
     # Hard-coded options that should not be saved to settings.yaml
@@ -1346,20 +1379,7 @@ class MainWindow(QMainWindow):
                 self.serial_port.write((command + str(tx_value)).encode())
                 self.print_to_display(f"< {command}")
                 self.command_input.clear()
-            else:
-                # If command input is blank, get the last command from history and send it
-                history_file = os.path.expanduser("~/.command_history.txt")
-                if os.path.exists(history_file):
-                    with open(history_file, "r") as f:
-                        lines = f.read().splitlines()
-                    if lines:
-                        last_command = lines[-1]
-                        self.command_input.setText(last_command)
-                        self.send_command()
-                    else:
-                        QMessageBox.information(self, "No History", "No previous command found in history.")
-                else:
-                    QMessageBox.information(self, "No History", "No previous command found in history.")
+            # If empty, do nothing (no error)
 
     def send_predefined_command(self, command: str) -> None:
         self.command_input.setText(command)
