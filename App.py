@@ -62,6 +62,18 @@ class HistoryLineEdit(QLineEdit):
                 super().keyPressEvent(a0)
 
 class MainWindow(QMainWindow):
+    # Hard-coded options that should not be saved to settings.yaml
+    OPTIONS = {
+        'auto_clear_output': [[False, 0], [True, 1]],
+        'data_bits': [8, 7, 6, 5],
+        'flow_control': [['None', 0], ['Hardware', 1], ['Software', 2]],
+        'maximized': [[True, True], [False, False]],
+        'open_mode': [['R/W', 0], ['RO', 1], ['WO', 2]],
+        'parity': [['None', 0], ['Even', 1], ['Odd', 2], ['Space', 3], ['Mark', 4]],
+        'stop_bits': [1, 1.5, 2],
+        'tx_line_ending': [['LN', '\\n'], ['CR', '\\r'], ['CRLN', '\\r\\n'], ['NUL', '\\0']]
+    }
+    
     def __init__(self) -> None:
         """
         Initializes the main window of the Serial monitor application.
@@ -91,28 +103,22 @@ class MainWindow(QMainWindow):
                 'D': {'command': '', 'label': '', 'tooltip': ''}, 
                 'E': {'command': '', 'label': '', 'tooltip': ''}
                 }, 
-            'general': {'accent_color': '#1E90FF', 
-                        'auto_clear_output': False, 
-                        'data_bits': 8, 
-                        'flow_control': 'None', 
-                        'hover_color': '#63B8FF', 
-                        'maximized': True, 
-                        'open_mode': 'R/W', 
-                        'options-auto_clear_output': [[False, 0], [True, 1]], 
-                        'options-data_bits': [8, 7, 6, 5], 
-                        'options-flow_control': [['None', 0], ['Hardware', 1], ['Software', 2]], 
-                        'options-maximized': [[True, True], [False, False]], 
-                        'options-open_mode': [['R/W', 0], ['RO', 1], ['WO', 2]], 
-                        'options-parity': [['None', 0], ['Even', 1], ['Odd', 2], ['Space', 3], ['Mark', 4]], 
-                        'options-stop_bits': [1, 1.5, 2], 
-                        'options-tx_line_ending': [['LN', '\\n'], ['CR', '\\r'], ['CRLN', '\\r\\n'], ['NUL', '\\0']], 
-                        'parity': 'None', 
-                        'stop_bits': 1, 
-                        'tx_line_ending': 'LN',
-                        'reveal-hidden-char': False,
-                        'last-baudrate': 115200,
-                        'custom-baudrate': 115200}
+            'general': {
+                'accent_color': '#1E90FF', 
+                'auto_clear_output': False, 
+                'data_bits': 8, 
+                'flow_control': 'None', 
+                'hover_color': '#63B8FF', 
+                'maximized': True, 
+                'open_mode': 'R/W', 
+                'parity': 'None', 
+                'stop_bits': 1, 
+                'tx_line_ending': 'LN',
+                'reveal-hidden-char': False,
+                'last-baudrate': 115200,
+                'custom-baudrate': 115200
             }
+        }
         self.default_settings = self.settings.copy()
         self.load_settings()  # Load settings from YAML file
 
@@ -643,7 +649,7 @@ class MainWindow(QMainWindow):
 
             # Drop-down / list options
             elif key == "Tx line Ending":
-                items = [opt[0] for opt in general["options-tx_line_ending"]]
+                items = [opt[0] for opt in self.OPTIONS['tx_line_ending']]
                 current_value = self.settings_table.item(row, 1).text()
                 current_index = items.index(current_value) if current_value in items else 0
                 new_value, ok = QInputDialog.getItem(
@@ -655,7 +661,7 @@ class MainWindow(QMainWindow):
                     self.save_settings()
 
             elif key == "Data Bits":
-                items = [str(x) for x in general["options-data_bits"]]
+                items = [str(x) for x in self.OPTIONS['data_bits']]
                 current_value = str(general.get("data_bits", 8))
                 current_index = items.index(current_value) if current_value in items else 0
                 new_value, ok = QInputDialog.getItem(
@@ -667,7 +673,7 @@ class MainWindow(QMainWindow):
                     self.save_settings()
 
             elif key == "Parity":
-                items = [x[0] for x in general["options-parity"]]
+                items = [x[0] for x in self.OPTIONS['parity']]
                 current_value = general.get("parity", "None")
                 current_index = items.index(current_value) if current_value in items else 0
                 new_value, ok = QInputDialog.getItem(
@@ -679,7 +685,7 @@ class MainWindow(QMainWindow):
                     self.save_settings()
 
             elif key == "Stop Bits":
-                items = [str(x) for x in general["options-stop_bits"]]
+                items = [str(x) for x in self.OPTIONS['stop_bits']]
                 current_value = str(general.get("stop_bits", 1))
                 current_index = items.index(current_value) if current_value in items else 0
                 new_value, ok = QInputDialog.getItem(
@@ -691,7 +697,7 @@ class MainWindow(QMainWindow):
                     self.save_settings()
 
             elif key == "Flow Control":
-                items = [x[0] for x in general["options-flow_control"]]
+                items = [x[0] for x in self.OPTIONS['flow_control']]
                 current_value = general.get("flow_control", "None")
                 current_index = items.index(current_value) if current_value in items else 0
                 new_value, ok = QInputDialog.getItem(
@@ -703,7 +709,7 @@ class MainWindow(QMainWindow):
                     self.save_settings()
 
             elif key == "Open Mode":
-                items = [x[0] for x in general["options-open_mode"]]
+                items = [x[0] for x in self.OPTIONS['open_mode']]
                 current_value = general.get("open_mode", "R/W")
                 current_index = items.index(current_value) if current_value in items else 0
                 new_value, ok = QInputDialog.getItem(
@@ -910,11 +916,6 @@ class MainWindow(QMainWindow):
         dialog.setModal(True)
         dialog_layout = QVBoxLayout(dialog)
         
-        # Description label
-        description_label = QLabel("Configure the quick button:")
-        description_label.setStyleSheet("color: #63B8FF; font-weight: bold;")
-        dialog_layout.addWidget(description_label)
-        
         # Name field
         name_label = QLabel("Button Name:")
         name_label.setToolTip("The text to display on the button")
@@ -1053,6 +1054,21 @@ class MainWindow(QMainWindow):
                 # Migrate from old 'buttons' to 'quick_buttons' format
                 if 'buttons' in settings and 'quick_buttons' not in settings:
                     settings['quick_buttons'] = settings.pop('buttons')
+                
+                # Remove hard-coded options from settings if they exist
+                if 'general' in settings:
+                    options_to_remove = [
+                        'options-auto_clear_output',
+                        'options-data_bits',
+                        'options-flow_control',
+                        'options-maximized',
+                        'options-open_mode',
+                        'options-parity',
+                        'options-stop_bits',
+                        'options-tx_line_ending'
+                    ]
+                    for option in options_to_remove:
+                        settings['general'].pop(option, None)
                 
                 self.settings = settings
                 # print(f"Settings loaded: {self.settings}")
@@ -1285,7 +1301,7 @@ class MainWindow(QMainWindow):
 
                 # Find the matching value from options
                 tx_value = next(
-                    value for key, value in self.settings['general']['options-tx_line_ending'] 
+                    value for key, value in self.OPTIONS['tx_line_ending'] 
                     if key == tx_key
                 )
                 tx_value = tx_value.encode().decode("unicode_escape")
