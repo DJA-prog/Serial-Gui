@@ -16,7 +16,7 @@ from PyQt5.QtWidgets import (
     QSpinBox, QTabWidget, QFileDialog, QMenu, QAction
 )
 from PyQt5.QtCore import QTimer, Qt
-from PyQt5.QtGui import QMouseEvent, QCloseEvent
+from PyQt5.QtGui import QMouseEvent, QCloseEvent, QKeyEvent
 from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QColorDialog, QAbstractItemView
 
 def get_config_dir(app_name: str) -> Path:
@@ -45,7 +45,7 @@ class HistoryLineEdit(QLineEdit):
         self.last_enter_time = 0  # Track time of last enter press for double-enter detection
         self.double_enter_threshold = 500  # milliseconds
 
-    def keyPressEvent(self, a0) -> None:
+    def keyPressEvent(self, a0: QKeyEvent) -> None:  # type: ignore[override]
         if self.parent_window is not None:
             if a0.key() == Qt.Key.Key_Up:
                 # Limit navigation to last 10 history entries
@@ -492,7 +492,8 @@ class MainWindow(QMainWindow):
         if not os.path.exists(commands_dir):
             os.makedirs(commands_dir, exist_ok=True)
 
-        yaml_files = [f for f in os.listdir(commands_dir) if f.endswith(".yaml")]
+        yaml_files = [f for f in os.listdir(commands_dir) 
+                      if f.endswith(".yaml") and os.path.isfile(os.path.join(commands_dir, f))]
         yaml_files.sort()
         self.yaml_dropdown.addItems(yaml_files)
 
@@ -536,6 +537,10 @@ class MainWindow(QMainWindow):
         def populate_command_lists(yaml_filename: str) -> None:
             full_path = os.path.join(commands_dir, yaml_filename)
             if not os.path.exists(full_path):
+                return
+            
+            # Skip if it's a directory
+            if os.path.isdir(full_path):
                 return
 
             self.no_input_list.clear()
@@ -657,10 +662,14 @@ class MainWindow(QMainWindow):
         self.settings_table.setRowCount(14)
         self.settings_table.setColumnCount(2)
         self.settings_table.setHorizontalHeaderLabels(["Setting", "Value"])
-        self.settings_table.verticalHeader().setVisible(False)
+        v_header = self.settings_table.verticalHeader()
+        if v_header:
+            v_header.setVisible(False)
         self.settings_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.settings_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.settings_table.horizontalHeader().setStretchLastSection(True)
+        h_header = self.settings_table.horizontalHeader()
+        if h_header:
+            h_header.setStretchLastSection(True)
         self.settings_table.setColumnWidth(0, int(self.left_panel_width * 0.5))
 
         # Populate settings
@@ -687,12 +696,18 @@ class MainWindow(QMainWindow):
 
         # Handle editing
         def edit_setting(row: int, column: int) -> None:
-            key = self.settings_table.item(row, 0).text()
+            item = self.settings_table.item(row, 0)
+            if item is None:
+                return
+            key = item.text()
             general = self.settings["general"]
 
             # Boolean options
             if key in ("Auto Clear Output", "Maximized", "Reveal Hidden Char"):
-                current = str(self.settings_table.item(row, 1).text()).lower() == "true"
+                value_item = self.settings_table.item(row, 1)
+                if value_item is None:
+                    return
+                current = str(value_item.text()).lower() == "true"
                 new_value = not current
                 self.settings_table.setItem(row, 1, QTableWidgetItem(str(new_value)))
                 # Update corresponding key in settings
@@ -722,7 +737,10 @@ class MainWindow(QMainWindow):
             # Drop-down / list options
             elif key == "Tx line Ending":
                 items = [opt[0] for opt in self.OPTIONS['tx_line_ending']]
-                current_value = self.settings_table.item(row, 1).text()
+                value_item = self.settings_table.item(row, 1)
+                if value_item is None:
+                    return
+                current_value = value_item.text()
                 current_index = items.index(current_value) if current_value in items else 0
                 new_value, ok = QInputDialog.getItem(
                     self, "Edit TX Line Ending", "Select new line ending:", items, current_index, False
@@ -808,7 +826,9 @@ class MainWindow(QMainWindow):
                     new_value = max(100, abs(int(new_value)))  # Minimum 100 lines
                     self.settings_table.setItem(row, 1, QTableWidgetItem(str(new_value)))
                     general["max_output_lines"] = new_value
-                    self.response_display.document().setMaximumBlockCount(new_value)
+                    doc = self.response_display.document()
+                    if doc:
+                        doc.setMaximumBlockCount(new_value)
                     self.save_settings()
 
         self.settings_table.cellDoubleClicked.connect(edit_setting)
@@ -919,8 +939,10 @@ class MainWindow(QMainWindow):
         self.response_display = QTextEdit()
         self.response_display.setReadOnly(True)
         max_lines = self.settings.get('general', {}).get('max_output_lines', 10000)
-        self.response_display.document().setMaximumBlockCount(max_lines)
-        self.response_display.setContextMenuPolicy(Qt.CustomContextMenu)
+        doc = self.response_display.document()
+        if doc:
+            doc.setMaximumBlockCount(max_lines)
+        self.response_display.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.response_display.customContextMenuRequested.connect(self.show_output_context_menu)
         self.middle_layout.addWidget(self.response_display)
 
@@ -943,7 +965,7 @@ class MainWindow(QMainWindow):
 
                 btn = QPushButton(label if label else "---")
                 btn.setToolTip(tooltip)
-                btn.setContextMenuPolicy(Qt.CustomContextMenu)
+                btn.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
                 btn.customContextMenuRequested.connect(lambda pos, k=key: self.show_button_context_menu(pos, k))
                 
                 # Always keep button enabled so context menu works, but connect handler that checks for command
@@ -1583,9 +1605,10 @@ class MainWindow(QMainWindow):
         """Clear the response display."""
         self.response_display.clear()
 
-    def closeEvent(self, a0: QCloseEvent) -> None:
-        self.disconnect_serial()
-        a0.accept()
+    def closeEvent(self, a0: QCloseEvent | None) -> None:  # type: ignore[override]
+        if a0 is not None:
+            self.disconnect_serial()
+            a0.accept()
 
     def update_connected_time(self) -> None:
         self.connected_time_seconds += 1
