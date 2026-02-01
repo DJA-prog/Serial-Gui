@@ -7,16 +7,21 @@ import platform
 from pathlib import Path
 import yaml
 from datetime import datetime
+import time
+import threading
+from typing import Optional, Dict, Any
+
+from MacroEditor import MacroEditor
 
 # import sip
 
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QListWidgetItem,
     QTextEdit, QLineEdit, QLabel, QComboBox, QMessageBox, QTableWidget, QTableWidgetItem, QInputDialog, QDialog, QListWidget, QCheckBox,
-    QSpinBox, QTabWidget, QFileDialog
+    QSpinBox, QTabWidget, QFileDialog, QMenu, QAction, QScrollArea
 )
-from PyQt5.QtCore import QTimer, Qt
-from PyQt5.QtGui import QMouseEvent, QCloseEvent
+from PyQt5.QtCore import QTimer, Qt, QPoint, pyqtSignal, pyqtSlot
+from PyQt5.QtGui import QMouseEvent, QCloseEvent, QKeyEvent
 from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QColorDialog, QAbstractItemView
 
 def get_config_dir(app_name: str) -> Path:
@@ -42,12 +47,18 @@ class HistoryLineEdit(QLineEdit):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.parent_window = parent  # so we can access parent's history list
+        self.last_enter_time = 0  # Track time of last enter press for double-enter detection
+        self.double_enter_threshold = 500  # milliseconds
 
-    def keyPressEvent(self, a0) -> None:
+    def keyPressEvent(self, a0: QKeyEvent) -> None:  # type: ignore[override]
         if self.parent_window is not None:
             if a0.key() == Qt.Key.Key_Up:
-                if self.parent_window.history_index > 0:
-                    if self.parent_window.history_index == len(self.parent_window.history):
+                # Limit navigation to last 10 history entries
+                history_length = len(self.parent_window.history)
+                start_index = max(0, history_length - 10)
+                
+                if self.parent_window.history_index > start_index:
+                    if self.parent_window.history_index == history_length:
                         self.parent_window.current_text = self.text()
                     self.parent_window.history_index -= 1
                     self.setText(self.parent_window.history[self.parent_window.history_index])
@@ -58,10 +69,55 @@ class HistoryLineEdit(QLineEdit):
                 elif self.parent_window.history_index == len(self.parent_window.history) - 1:
                     self.parent_window.history_index += 1
                     self.setText(self.parent_window.current_text)
+            elif a0.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                # Check for double-enter on empty input
+                import time
+                current_time = int(time.time() * 1000)  # milliseconds
+                
+                if not self.text().strip():
+                    # Input is empty
+                    if current_time - self.last_enter_time < self.double_enter_threshold:
+                        # Double enter detected - get and send last command
+                        if self.parent_window.history:
+                            last_command = self.parent_window.history[-1]
+                            self.setText(last_command)
+                            # Let the parent handle the send
+                            super().keyPressEvent(a0)
+                            self.last_enter_time = 0  # Reset to prevent triple-enter issues
+                        else:
+                            # No history, do nothing
+                            self.last_enter_time = 0
+                    else:
+                        # First enter on empty input - just record time, don't send
+                        self.last_enter_time = current_time
+                else:
+                    # Input has text - send normally
+                    self.last_enter_time = 0
+                    super().keyPressEvent(a0)
             else:
                 super().keyPressEvent(a0)
+        else:
+            super().keyPressEvent(a0)
 
 class MainWindow(QMainWindow):
+    # Qt signals for thread-safe communication
+    macro_print_signal = pyqtSignal(str)
+    macro_set_input_signal = pyqtSignal(str)
+    macro_send_command_signal = pyqtSignal()
+    macro_status_signal = pyqtSignal(str)
+    
+    # Hard-coded options that should not be saved to settings.yaml
+    OPTIONS = {
+        'auto_clear_output': [[False, 0], [True, 1]],
+        'data_bits': [8, 7, 6, 5],
+        'flow_control': [['None', 0], ['Hardware', 1], ['Software', 2]],
+        'maximized': [[True, True], [False, False]],
+        'open_mode': [['R/W', 0], ['RO', 1], ['WO', 2]],
+        'parity': [['None', 0], ['Even', 1], ['Odd', 2], ['Space', 3], ['Mark', 4]],
+        'stop_bits': [1, 1.5, 2],
+        'tx_line_ending': [['LN', '\\n'], ['CR', '\\r'], ['CRLN', '\\r\\n'], ['NUL', '\\0']]
+    }
+    
     def __init__(self) -> None:
         """
         Initializes the main window of the Serial monitor application.
@@ -84,35 +140,38 @@ class MainWindow(QMainWindow):
         self.app_configs_path = get_config_dir("SerialCommunicationMonitor")
         
         self.settings = {
-            'buttons': {
+            'quick_buttons': {
                 'A': {'command': '', 'label': '', 'tooltip': ''}, 
                 'B': {'command': '', 'label': '', 'tooltip': ''}, 
                 'C': {'command': '', 'label': '', 'tooltip': ''}, 
                 'D': {'command': '', 'label': '', 'tooltip': ''}, 
                 'E': {'command': '', 'label': '', 'tooltip': ''}
                 }, 
-            'general': {'accent_color': '#1E90FF', 
-                        'auto_clear_output': False, 
-                        'data_bits': 8, 
-                        'flow_control': 'None', 
-                        'hover_color': '#63B8FF', 
-                        'maximized': True, 
-                        'open_mode': 'R/W', 
-                        'options-auto_clear_output': [[False, 0], [True, 1]], 
-                        'options-data_bits': [8, 7, 6, 5], 
-                        'options-flow_control': [['None', 0], ['Hardware', 1], ['Software', 2]], 
-                        'options-maximized': [[True, True], [False, False]], 
-                        'options-open_mode': [['R/W', 0], ['RO', 1], ['WO', 2]], 
-                        'options-parity': [['None', 0], ['Even', 1], ['Odd', 2], ['Space', 3], ['Mark', 4]], 
-                        'options-stop_bits': [1, 1.5, 2], 
-                        'options-tx_line_ending': [['LN', '\\n'], ['CR', '\\r'], ['CRLN', '\\r\\n'], ['NUL', '\\0']], 
-                        'parity': 'None', 
-                        'stop_bits': 1, 
-                        'tx_line_ending': 'LN',
-                        'reveal-hidden-char': False,
-                        'last-baudrate': 115200,
-                        'custom-baudrate': 115200}
+            'general': {
+                'accent_color': '#1E90FF', 
+                'auto_clear_output': False,
+                'auto_reconnect': False,
+                'data_bits': 8,
+                'display_format': 'text',
+                'dtr_state': False,
+                'flow_control': 'None', 
+                'font_color': '#FFFFFF',
+                'hover_color': '#63B8FF',
+                'last_serial_port': '',
+                'last_tab_index': 0,
+                'maximized': True,
+                'max_output_lines': 10000,
+                'open_mode': 'R/W', 
+                'parity': 'None',
+                'rts_state': False,
+                'show_timestamps': False,
+                'stop_bits': 1, 
+                'tx_line_ending': 'LN',
+                'reveal-hidden-char': False,
+                'last-baudrate': 115200,
+                'custom-baudrate': 115200
             }
+        }
         self.default_settings = self.settings.copy()
         self.load_settings()  # Load settings from YAML file
 
@@ -147,6 +206,9 @@ class MainWindow(QMainWindow):
         self.connected_time_timer = QTimer()
         self.connected_time_timer.timeout.connect(self.update_connected_time)
 
+        # Store button references for later updates
+        self.custom_buttons = {}
+
         # Main layout
         self.main_layout = QVBoxLayout()
 
@@ -168,6 +230,12 @@ class MainWindow(QMainWindow):
         # Timer for reading serial data
         self.timer = QTimer()
         self.timer.timeout.connect(self.read_serial_data)
+        
+        # Connect macro signals for thread-safe GUI updates
+        self.macro_print_signal.connect(self.print_to_display)
+        self.macro_set_input_signal.connect(self.command_input.setText)
+        self.macro_send_command_signal.connect(self.send_command)
+        self.macro_status_signal.connect(self.macro_status_label.setText)
 
     def set_style(self) -> None:
 
@@ -311,6 +379,7 @@ class MainWindow(QMainWindow):
         """
         style = style.replace("#1E90FF", str(self.settings['general']['accent_color']))
         style = style.replace("#63B8FF", str(self.settings['general']['hover_color']))
+        style = style.replace("#FFFFFF", str(self.settings['general'].get('font_color', '#FFFFFF')))
 
         self.setStyleSheet(style)
 
@@ -348,11 +417,16 @@ class MainWindow(QMainWindow):
 
         # Add DTR and RTS checkboxes
         self.dtr_checkbox = QCheckBox("DTR")
-        self.dtr_checkbox.setChecked(False)  # Default selected
+        self.dtr_checkbox.setChecked(self.settings.get('general', {}).get('dtr_state', False))
         self.rts_checkbox = QCheckBox("RTS")
-        self.rts_checkbox.setChecked(False)  # Default selected
+        self.rts_checkbox.setChecked(self.settings.get('general', {}).get('rts_state', False))
         self.auto_reconnect_checkbox = QCheckBox("Auto Reconnect")
-        self.auto_reconnect_checkbox.setChecked(False)  # Default selected
+        self.auto_reconnect_checkbox.setChecked(self.settings.get('general', {}).get('auto_reconnect', False))
+        
+        # Connect state change handlers to save settings
+        self.dtr_checkbox.stateChanged.connect(lambda: self.save_checkbox_state('dtr_state', self.dtr_checkbox.isChecked()))
+        self.rts_checkbox.stateChanged.connect(lambda: self.save_checkbox_state('rts_state', self.rts_checkbox.isChecked()))
+        self.auto_reconnect_checkbox.stateChanged.connect(lambda: self.save_checkbox_state('auto_reconnect', self.auto_reconnect_checkbox.isChecked()))
 
         top_layout.addWidget(port_label)
         top_layout.addWidget(self.port_combo)
@@ -373,22 +447,38 @@ class MainWindow(QMainWindow):
 
         left_layout = QVBoxLayout()
 
-        tab_widget = QTabWidget()
-        tab_widget.setFixedWidth(self.left_panel_width)
+        self.tab_widget = QTabWidget()
+        self.tab_widget.setFixedWidth(self.left_panel_width)
 
         self.tab_commands()  # Create the commands tab
         self.tab_input_history()  # Create the command history tab
+        self.tab_macros()  # Create the macros tab
         self.tab_settings()
         self.tab_virtual_serial()
 
         # Add tables to tabs
-        tab_widget.addTab(self.commands_tab, "Commands")
-        tab_widget.addTab(self.command_history_tab, "History")
-        tab_widget.addTab(self.settings_tab, "Settings")
-        tab_widget.addTab(self.virtual_serial_tab, "Virtual Serial")
+        self.tab_widget.addTab(self.commands_tab, "Commands")
+        self.tab_widget.addTab(self.command_history_tab, "History")
+        self.tab_widget.addTab(self.macros_tab, "Macros")
+        self.tab_widget.addTab(self.settings_tab, "Settings")
+        self.tab_widget.addTab(self.virtual_serial_tab, "Virtual Serial")
+        
+        # Restore last active tab
+        last_tab = self.settings.get('general', {}).get('last_tab_index', 0)
+        self.tab_widget.setCurrentIndex(last_tab)
+        
+        # Connect tab change handler to save current tab
+        self.tab_widget.currentChanged.connect(self.save_current_tab)
 
-        left_layout.addWidget(tab_widget)
+        left_layout.addWidget(self.tab_widget)
         self.middle_layout.addLayout(left_layout)
+        
+        # Restore last serial port if it exists
+        last_port = self.settings.get('general', {}).get('last_serial_port', '')
+        if last_port:
+            index = self.port_combo.findText(last_port)
+            if index >= 0:
+                self.port_combo.setCurrentIndex(index)
 
     def load_yaml_commands(self, filepath: str) -> dict:
         with open(filepath, "r") as f:
@@ -421,9 +511,10 @@ class MainWindow(QMainWindow):
         commands_dir = os.path.join(self.app_configs_path, "commands")
         
         if not os.path.exists(commands_dir):
-            os.makedirs(commands_dir)
+            os.makedirs(commands_dir, exist_ok=True)
 
-        yaml_files = [f for f in os.listdir(commands_dir) if f.endswith(".yaml")]
+        yaml_files = [f for f in os.listdir(commands_dir) 
+                      if f.endswith(".yaml") and os.path.isfile(os.path.join(commands_dir, f))]
         yaml_files.sort()
         self.yaml_dropdown.addItems(yaml_files)
 
@@ -467,6 +558,10 @@ class MainWindow(QMainWindow):
         def populate_command_lists(yaml_filename: str) -> None:
             full_path = os.path.join(commands_dir, yaml_filename)
             if not os.path.exists(full_path):
+                return
+            
+            # Skip if it's a directory
+            if os.path.isdir(full_path):
                 return
 
             self.no_input_list.clear()
@@ -531,6 +626,266 @@ class MainWindow(QMainWindow):
         clear_history_btn.clicked.connect(self.confirm_clear_history)
         self.command_history_layout.addWidget(clear_history_btn)
 
+    def tab_macros(self) -> None:
+        """Create the macros tab with scrollable button list and create button"""
+        self.macros_tab = QWidget()
+        self.macros_layout = QVBoxLayout(self.macros_tab)
+        
+        # Create macros directory
+        self.macros_dir = Path(self.app_configs_path) / "macros"
+        self.macros_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Title
+        self.macros_layout.addWidget(QLabel("Macros"))
+        
+        # Scrollable area for macro buttons
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_widget = QWidget()
+        self.macro_buttons_layout = QVBoxLayout(scroll_widget)
+        self.macro_buttons_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        scroll_area.setWidget(scroll_widget)
+        self.macros_layout.addWidget(scroll_area)
+        
+        # Dictionary to track macro buttons
+        self.macro_buttons = {}
+        
+        # Create macro button at bottom
+        create_macro_btn = QPushButton("Create New Macro")
+        create_macro_btn.setToolTip("Create a new macro")
+        create_macro_btn.clicked.connect(self.create_new_macro)
+        self.macros_layout.addWidget(create_macro_btn)
+        
+        # Load existing macros
+        self.refresh_macro_list()
+    
+    def refresh_macro_list(self) -> None:
+        """Refresh the list of macro buttons"""
+        # Clear existing buttons
+        for button in self.macro_buttons.values():
+            button.deleteLater()
+        self.macro_buttons.clear()
+        
+        # Load macros from directory
+        if self.macros_dir.exists():
+            macro_files = sorted(self.macros_dir.glob("*.yaml"))
+            
+            for macro_file in macro_files:
+                try:
+                    with open(macro_file, 'r') as f:
+                        macro_data = yaml.safe_load(f)
+                    
+                    macro_name = macro_data.get('name', macro_file.stem)
+                    
+                    # Create button
+                    btn = QPushButton(macro_name)
+                    btn.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+                    btn.customContextMenuRequested.connect(
+                        lambda pos, path=macro_file: self.show_macro_context_menu(pos, path)
+                    )
+                    btn.clicked.connect(
+                        lambda _, path=macro_file: self.execute_macro(path)
+                    )
+                    
+                    self.macro_buttons_layout.addWidget(btn)
+                    self.macro_buttons[str(macro_file)] = btn
+                    
+                except Exception as e:
+                    print(f"Failed to load macro {macro_file}: {e}")
+    
+    def create_new_macro(self) -> None:
+        """Open the macro editor to create a new macro"""
+        accent_color = self.settings.get('general', {}).get('accent_color', '#1E90FF')
+        hover_color = self.settings.get('general', {}).get('hover_color', '#63B8FF')
+        editor = MacroEditor(self, accent_color=accent_color, hover_color=hover_color)
+        if editor.exec_() == QDialog.Accepted:
+            # Save the new macro
+            macro_name = editor.macro_name
+            if macro_name:
+                # Sanitize filename
+                safe_name = "".join(c for c in macro_name if c.isalnum() or c in (' ', '-', '_')).strip()
+                macro_path = self.macros_dir / f"{safe_name}.yaml"
+                
+                try:
+                    with open(macro_path, 'w') as f:
+                        yaml.dump(editor.macro_data, f, default_flow_style=False, sort_keys=False)
+                    QMessageBox.information(self, "Success", f"Macro '{macro_name}' created successfully!")
+                    self.refresh_macro_list()
+                except Exception as e:
+                    QMessageBox.critical(self, "Error", f"Failed to save macro: {e}")
+    
+    def show_macro_context_menu(self, pos: QPoint, macro_path: Path) -> None:
+        """Show context menu for a macro button"""
+        menu = QMenu(self)
+        
+        edit_action = QAction("Edit Macro", self)
+        edit_action.triggered.connect(lambda: self.edit_macro(macro_path))
+        menu.addAction(edit_action)
+        
+        delete_action = QAction("Delete Macro", self)
+        delete_action.triggered.connect(lambda: self.delete_macro(macro_path))
+        menu.addAction(delete_action)
+        
+        # Show menu at cursor position
+        sender = self.sender()
+        if sender and isinstance(sender, QWidget):
+            menu.exec_(sender.mapToGlobal(pos))
+    
+    def edit_macro(self, macro_path: Path) -> None:
+        """Open the macro editor to edit an existing macro"""
+        accent_color = self.settings.get('general', {}).get('accent_color', '#1E90FF')
+        hover_color = self.settings.get('general', {}).get('hover_color', '#63B8FF')
+        editor = MacroEditor(self, macro_path, accent_color=accent_color, hover_color=hover_color)
+        if editor.exec_() == QDialog.Accepted:
+            self.refresh_macro_list()
+    
+    def delete_macro(self, macro_path: Path) -> None:
+        """Delete a macro file"""
+        reply = QMessageBox.question(
+            self,
+            "Delete Macro",
+            f"Are you sure you want to delete '{macro_path.stem}'?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            try:
+                macro_path.unlink()
+                QMessageBox.information(self, "Success", "Macro deleted successfully!")
+                self.refresh_macro_list()
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to delete macro: {e}")
+    
+    def execute_macro(self, macro_path: Path) -> None:
+        """Execute a macro file"""
+        if not hasattr(self, 'serial_port') or not self.serial_port:
+            QMessageBox.warning(self, "Not Connected", "Please connect to a serial port first.")
+            return
+        
+        try:
+            with open(macro_path, 'r') as f:
+                macro_data = yaml.safe_load(f)
+            
+            macro_name = macro_data.get('name', macro_path.stem)
+            steps = macro_data.get('steps', [])
+            
+            if not steps:
+                QMessageBox.warning(self, "Empty Macro", "This macro has no steps.")
+                return
+            
+            # Execute macro in a separate thread to avoid blocking UI
+            thread = threading.Thread(target=self._execute_macro_steps, args=(macro_name, steps))
+            thread.daemon = True
+            thread.start()
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Execution Error", f"Failed to execute macro: {e}")
+    
+    def _print_to_display_threadsafe(self, message: str) -> None:
+        """Thread-safe wrapper for print_to_display using signal"""
+        self.macro_print_signal.emit(message)
+    
+    def _set_command_input_threadsafe(self, text: str) -> None:
+        """Thread-safe wrapper for setting command input using signal"""
+        self.macro_set_input_signal.emit(text)
+    
+    def _send_command_threadsafe(self) -> None:
+        """Thread-safe wrapper for send_command using signal"""
+        self.macro_send_command_signal.emit()
+    
+    def _update_macro_status_threadsafe(self, status: str) -> None:
+        """Thread-safe wrapper for updating macro status using signal"""
+        self.macro_status_signal.emit(status)
+    
+    def _execute_macro_steps(self, macro_name: str, steps: list) -> None:
+        """Execute macro steps in sequence"""
+        self._update_macro_status_threadsafe(f"Macro: Running '{macro_name}'")
+        self._print_to_display_threadsafe(f"══════════════════════════════════════")
+        self._print_to_display_threadsafe(f"  Executing Macro: {macro_name}")
+        self._print_to_display_threadsafe(f"══════════════════════════════════════")
+        
+        for i, step in enumerate(steps, 1):
+            try:
+                if 'input' in step:
+                    # Send command
+                    command = step['input']
+                    self._print_to_display_threadsafe(f"Step {i}: Send command '{command}'")
+                    self._set_command_input_threadsafe(command)
+                    time.sleep(0.05)  # Small delay to ensure setText completes
+                    self._send_command_threadsafe()
+                    time.sleep(0.1)  # Small delay for command to be sent
+                    
+                elif 'delay' in step:
+                    # Wait for specified time
+                    delay_ms = step['delay']
+                    self._print_to_display_threadsafe(f"Step {i}: Delay {delay_ms}ms")
+                    time.sleep(delay_ms / 1000.0)
+                    
+                elif 'output' in step:
+                    # Expect output
+                    output_config = step['output']
+                    expected = output_config.get('expected', '')
+                    timeout_ms = output_config.get('timeout', 1000)
+                    fail_action = output_config.get('fail')
+                    
+                    self._print_to_display_threadsafe(f"Step {i}: Expect '{expected}' (timeout {timeout_ms}ms)")
+                    
+                    # Wait and check for expected output
+                    received = self._wait_for_response(expected, timeout_ms / 1000.0)
+                    
+                    if not received:
+                        self._print_to_display_threadsafe(f"Step {i}: ✗ FAILED - Expected output not received")
+                        
+                        # Handle fail action
+                        if fail_action == "EXIT":
+                            self._print_to_display_threadsafe(f"══════════════════════════════════════")
+                            self._print_to_display_threadsafe(f"Macro EXITED (fail condition)")
+                            self._print_to_display_threadsafe(f"══════════════════════════════════════")
+                            self._update_macro_status_threadsafe("Macro: Idle")
+                            return
+                        elif isinstance(fail_action, dict) and 'input' in fail_action:
+                            # Send fail command
+                            fail_cmd = fail_action['input']
+                            self._print_to_display_threadsafe(f"Step {i}: Send recovery command '{fail_cmd}'")
+                            self._set_command_input_threadsafe(fail_cmd)
+                            time.sleep(0.05)
+                            self._send_command_threadsafe()
+                            time.sleep(0.1)
+                    else:
+                        self._print_to_display_threadsafe(f"Step {i}: ✓ SUCCESS - Received expected output")
+                        
+            except Exception as e:
+                self._print_to_display_threadsafe(f"Step {i}: ✗ ERROR - {e}")
+                self._update_macro_status_threadsafe("Macro: Idle")
+                return
+        
+        self._print_to_display_threadsafe(f"══════════════════════════════════════")
+        self._print_to_display_threadsafe(f"Macro '{macro_name}' COMPLETED")
+        self._print_to_display_threadsafe(f"══════════════════════════════════════")
+        self._update_macro_status_threadsafe("Macro: Idle")
+    
+    def _wait_for_response(self, expected: str, timeout: float) -> bool:
+        """Wait for expected response from serial port"""
+        start_time = time.time()
+        received_buffer = ""
+        
+        while time.time() - start_time < timeout:
+            if hasattr(self, 'serial_port') and self.serial_port:
+                try:
+                    if self.serial_port.in_waiting > 0:
+                        data = self.serial_port.read(self.serial_port.in_waiting)
+                        received_buffer += data.decode('utf-8', errors='ignore')
+                        
+                        if expected in received_buffer:
+                            return True
+                except:
+                    pass
+            
+            time.sleep(0.01)  # Small sleep to avoid busy waiting
+        
+        return False
+
     def tab_settings_set(self) -> None:
         settings = self.settings.get("general", {})
 
@@ -542,33 +897,39 @@ class MainWindow(QMainWindow):
         # Row 2: hover_color (color)
         hover_color_item = QTableWidgetItem(str(settings.get("hover_color", "#63B8FF")))
         self.settings_table.setItem(2, 1, hover_color_item)
-        # Row 3: maximized (bool)
+        # Row 3: font_color (color)
+        font_color_item = QTableWidgetItem(str(settings.get("font_color", "#FFFFFF")))
+        self.settings_table.setItem(3, 1, font_color_item)
+        # Row 4: maximized (bool)
         maximized_item = QTableWidgetItem(str(settings.get("maximized", False)))
-        self.settings_table.setItem(3, 1, maximized_item)
-        # Row 4: tx line ending
+        self.settings_table.setItem(4, 1, maximized_item)
+        # Row 5: tx line ending
         tx_line_ending_item = QTableWidgetItem(str(settings.get("tx_line_ending", "CRLN")))
-        self.settings_table.setItem(4, 1, tx_line_ending_item)
-        # Row 5: Data bits: 8,7,6,5
+        self.settings_table.setItem(5, 1, tx_line_ending_item)
+        # Row 6: Data bits: 8,7,6,5
         data_bits = QTableWidgetItem(str(settings.get("data_bits", "8")))
-        self.settings_table.setItem(5, 1, data_bits)
-        # Row 6: parity: None, Even, Odd, Space, Mark
+        self.settings_table.setItem(6, 1, data_bits)
+        # Row 7: parity: None, Even, Odd, Space, Mark
         parity = QTableWidgetItem(str(settings.get("parity", "None")))
-        self.settings_table.setItem(6, 1, parity)
-        # Row 7: Stop bits: 1, 2
+        self.settings_table.setItem(7, 1, parity)
+        # Row 8: Stop bits: 1, 2
         stop_bits = QTableWidgetItem(str(settings.get("stop_bits", "1")))
-        self.settings_table.setItem(7, 1, stop_bits)
-        # Row 8: Flow Control: None, Hardware, Software
+        self.settings_table.setItem(8, 1, stop_bits)
+        # Row 9: Flow Control: None, Hardware, Software
         flow_control = QTableWidgetItem(str(settings.get("flow_control", "None")))
-        self.settings_table.setItem(8, 1, flow_control)
-        # Row 9: Open mode: Read/Write, Read only, Write only
+        self.settings_table.setItem(9, 1, flow_control)
+        # Row 10: Open mode: Read/Write, Read only, Write only
         open_mode = QTableWidgetItem(str(settings.get("open_mode", "Read/Write")))
-        self.settings_table.setItem(9, 1, open_mode)
-        # Row 10: reveal_hidden_char (bool)
+        self.settings_table.setItem(10, 1, open_mode)
+        # Row 11: reveal_hidden_char (bool)
         reveal_hidden_char_item = QTableWidgetItem(str(settings.get("reveal_hidden_char", False)))
-        self.settings_table.setItem(10, 1, reveal_hidden_char_item)
-        # Row 11: custom-baudrate (int)
+        self.settings_table.setItem(11, 1, reveal_hidden_char_item)
+        # Row 12: max_output_lines (int)
+        max_output_lines_item = QTableWidgetItem(str(settings.get("max_output_lines", 10000)))
+        self.settings_table.setItem(12, 1, max_output_lines_item)
+        # Row 13: custom-baudrate (int)
         custom_baud_rate_item = QTableWidgetItem(str(settings.get("custom-baudrate", 115200)))
-        self.settings_table.setItem(11, 1, custom_baud_rate_item)
+        self.settings_table.setItem(13, 1, custom_baud_rate_item)
 
     def tab_settings(self) -> None:
 
@@ -578,14 +939,18 @@ class MainWindow(QMainWindow):
         # Settings table
         self.settings_table = QTableWidget()
         self.settings_table.setToolTip("Double-click a value to edit. For colors, a color picker will appear.")
-        self.settings_table.setRowCount(12)
+        self.settings_table.setRowCount(14)
         self.settings_table.setColumnCount(2)
         self.settings_table.setHorizontalHeaderLabels(["Setting", "Value"])
-        self.settings_table.verticalHeader().setVisible(False)
+        v_header = self.settings_table.verticalHeader()
+        if v_header:
+            v_header.setVisible(False)
         self.settings_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.settings_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.settings_table.setColumnWidth(0, int(self.left_panel_width * 0.45))
-        self.settings_table.setColumnWidth(1, int(self.left_panel_width * 0.48))
+        h_header = self.settings_table.horizontalHeader()
+        if h_header:
+            h_header.setStretchLastSection(True)
+        self.settings_table.setColumnWidth(0, int(self.left_panel_width * 0.5))
 
         # Populate settings
         settings = self.settings.get("general", {})
@@ -593,15 +958,17 @@ class MainWindow(QMainWindow):
         self.settings_table.setItem(0, 0, QTableWidgetItem("Auto Clear Output"))
         self.settings_table.setItem(1, 0, QTableWidgetItem("Accent Color"))
         self.settings_table.setItem(2, 0, QTableWidgetItem("Hover Color"))
-        self.settings_table.setItem(3, 0, QTableWidgetItem("Maximized"))
-        self.settings_table.setItem(4, 0, QTableWidgetItem("Tx line Ending"))
-        self.settings_table.setItem(5, 0, QTableWidgetItem("Data Bits"))
-        self.settings_table.setItem(6, 0, QTableWidgetItem("Parity"))
-        self.settings_table.setItem(7, 0, QTableWidgetItem("Stop Bits"))
-        self.settings_table.setItem(8, 0, QTableWidgetItem("Flow Control"))
-        self.settings_table.setItem(9, 0, QTableWidgetItem("Open Mode"))
-        self.settings_table.setItem(10, 0, QTableWidgetItem("Reveal Hidden Char"))
-        self.settings_table.setItem(11, 0, QTableWidgetItem("Custom Baud Rate"))
+        self.settings_table.setItem(3, 0, QTableWidgetItem("Font Color"))
+        self.settings_table.setItem(4, 0, QTableWidgetItem("Maximized"))
+        self.settings_table.setItem(5, 0, QTableWidgetItem("Tx line Ending"))
+        self.settings_table.setItem(6, 0, QTableWidgetItem("Data Bits"))
+        self.settings_table.setItem(7, 0, QTableWidgetItem("Parity"))
+        self.settings_table.setItem(8, 0, QTableWidgetItem("Stop Bits"))
+        self.settings_table.setItem(9, 0, QTableWidgetItem("Flow Control"))
+        self.settings_table.setItem(10, 0, QTableWidgetItem("Open Mode"))
+        self.settings_table.setItem(11, 0, QTableWidgetItem("Reveal Hidden Char"))
+        self.settings_table.setItem(12, 0, QTableWidgetItem("Max Output Lines"))
+        self.settings_table.setItem(13, 0, QTableWidgetItem("Custom Baud Rate"))
 
         self.tab_settings_set()
 
@@ -609,12 +976,18 @@ class MainWindow(QMainWindow):
 
         # Handle editing
         def edit_setting(row: int, column: int) -> None:
-            key = self.settings_table.item(row, 0).text()
+            item = self.settings_table.item(row, 0)
+            if item is None:
+                return
+            key = item.text()
             general = self.settings["general"]
 
             # Boolean options
             if key in ("Auto Clear Output", "Maximized", "Reveal Hidden Char"):
-                current = str(self.settings_table.item(row, 1).text()).lower() == "true"
+                value_item = self.settings_table.item(row, 1)
+                if value_item is None:
+                    return
+                current = str(value_item.text()).lower() == "true"
                 new_value = not current
                 self.settings_table.setItem(row, 1, QTableWidgetItem(str(new_value)))
                 # Update corresponding key in settings
@@ -627,22 +1000,27 @@ class MainWindow(QMainWindow):
                 self.save_settings()
 
             # Color options
-            elif key in ("Accent Color", "Hover Color"):
+            elif key in ("Accent Color", "Hover Color", "Font Color"):
                 color = QColorDialog.getColor()
                 if color.isValid():
                     hex_color = color.name()
                     self.settings_table.setItem(row, 1, QTableWidgetItem(hex_color))
                     if key == "Accent Color":
                         general["accent_color"] = hex_color
-                    else:
+                    elif key == "Hover Color":
                         general["hover_color"] = hex_color
+                    elif key == "Font Color":
+                        general["font_color"] = hex_color
                     self.save_settings()
                     self.set_style()
 
             # Drop-down / list options
             elif key == "Tx line Ending":
-                items = [opt[0] for opt in general["options-tx_line_ending"]]
-                current_value = self.settings_table.item(row, 1).text()
+                items = [opt[0] for opt in self.OPTIONS['tx_line_ending']]
+                value_item = self.settings_table.item(row, 1)
+                if value_item is None:
+                    return
+                current_value = value_item.text()
                 current_index = items.index(current_value) if current_value in items else 0
                 new_value, ok = QInputDialog.getItem(
                     self, "Edit TX Line Ending", "Select new line ending:", items, current_index, False
@@ -653,7 +1031,7 @@ class MainWindow(QMainWindow):
                     self.save_settings()
 
             elif key == "Data Bits":
-                items = [str(x) for x in general["options-data_bits"]]
+                items = [str(x) for x in self.OPTIONS['data_bits']]
                 current_value = str(general.get("data_bits", 8))
                 current_index = items.index(current_value) if current_value in items else 0
                 new_value, ok = QInputDialog.getItem(
@@ -665,7 +1043,7 @@ class MainWindow(QMainWindow):
                     self.save_settings()
 
             elif key == "Parity":
-                items = [x[0] for x in general["options-parity"]]
+                items = [x[0] for x in self.OPTIONS['parity']]
                 current_value = general.get("parity", "None")
                 current_index = items.index(current_value) if current_value in items else 0
                 new_value, ok = QInputDialog.getItem(
@@ -677,7 +1055,7 @@ class MainWindow(QMainWindow):
                     self.save_settings()
 
             elif key == "Stop Bits":
-                items = [str(x) for x in general["options-stop_bits"]]
+                items = [str(x) for x in self.OPTIONS['stop_bits']]
                 current_value = str(general.get("stop_bits", 1))
                 current_index = items.index(current_value) if current_value in items else 0
                 new_value, ok = QInputDialog.getItem(
@@ -689,7 +1067,7 @@ class MainWindow(QMainWindow):
                     self.save_settings()
 
             elif key == "Flow Control":
-                items = [x[0] for x in general["options-flow_control"]]
+                items = [x[0] for x in self.OPTIONS['flow_control']]
                 current_value = general.get("flow_control", "None")
                 current_index = items.index(current_value) if current_value in items else 0
                 new_value, ok = QInputDialog.getItem(
@@ -701,7 +1079,7 @@ class MainWindow(QMainWindow):
                     self.save_settings()
 
             elif key == "Open Mode":
-                items = [x[0] for x in general["options-open_mode"]]
+                items = [x[0] for x in self.OPTIONS['open_mode']]
                 current_value = general.get("open_mode", "R/W")
                 current_index = items.index(current_value) if current_value in items else 0
                 new_value, ok = QInputDialog.getItem(
@@ -721,63 +1099,19 @@ class MainWindow(QMainWindow):
                     general["custom-baudrate"] = new_value
                     self.save_settings()
 
+            elif key == "Max Output Lines":
+                current_value = str(general.get("max_output_lines", 10000))
+                new_value, ok = QInputDialog.getText(self, "Edit Max Output Lines", "Enter maximum number of lines to keep in output display:\n(Prevents unlimited memory growth)", text=current_value)
+                if ok and new_value:
+                    new_value = max(100, abs(int(new_value)))  # Minimum 100 lines
+                    self.settings_table.setItem(row, 1, QTableWidgetItem(str(new_value)))
+                    general["max_output_lines"] = new_value
+                    doc = self.response_display.document()
+                    if doc:
+                        doc.setMaximumBlockCount(new_value)
+                    self.save_settings()
+
         self.settings_table.cellDoubleClicked.connect(edit_setting)
-
-        custom_buttons_title = QLabel("Custom Bottom Bar Butttons")
-        self.settings_layout.addWidget(custom_buttons_title)
-
-        custom_buttons_table = QTableWidget()
-        custom_buttons_table.setRowCount(0)
-        custom_buttons_table.setColumnCount(2)
-        custom_buttons_table.setHorizontalHeaderLabels(["Label", "Command"])
-        custom_buttons_table.verticalHeader().setVisible(False)
-        custom_buttons_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        custom_buttons_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        custom_buttons_table.setColumnWidth(0, int(self.left_panel_width * 0.45))
-        custom_buttons_table.setColumnWidth(1, int(self.left_panel_width * 0.50))
-
-        self.settings_layout.addWidget(custom_buttons_table)
-
-        # Populate custom buttons from settings
-        if 'buttons' in self.settings:
-            for key, button in self.settings['buttons'].items():
-                if isinstance(button, dict):
-                    label = button.get('label', '')
-                    command = button.get('command', '')
-                    custom_buttons_table.insertRow(custom_buttons_table.rowCount())
-                    custom_buttons_table.setItem(custom_buttons_table.rowCount() - 1, 0, QTableWidgetItem(label))
-                    custom_buttons_table.setItem(custom_buttons_table.rowCount() - 1, 1, QTableWidgetItem(command))
-        
-        def edit_custom_button(row: int, column: int) -> None:
-            keys = ['A', 'B', 'C', 'D', 'E']
-            if column == 0:
-                # Edit label
-                current_label = custom_buttons_table.item(row, 0).text()
-                new_label, ok = QInputDialog.getText(self, "Edit Button Label", "Enter new label:", text=current_label)
-                if ok and new_label:
-                    custom_buttons_table.setItem(row, 0, QTableWidgetItem(new_label))
-                    # Update settings
-                    command = custom_buttons_table.item(row, 1).text()
-                    key = keys[row]
-                    if key in self.settings['buttons']:
-                        self.settings['buttons'][key] = {'label': new_label, 'command': command}
-                        self.save_settings()
-                        print(self.settings['buttons'])
-            elif column == 1:
-                # Edit command
-                current_command = custom_buttons_table.item(row, 1).text()
-                new_command, ok = QInputDialog.getText(self, "Edit Button Command", "Enter new command:", text=current_command)
-                if ok and new_command:
-                    custom_buttons_table.setItem(row, 1, QTableWidgetItem(new_command))
-                    # Update settings
-                    label = custom_buttons_table.item(row, 0).text()
-                    key = keys[row]
-                    if key in self.settings['buttons']:
-                        self.settings['buttons'][key] = {'label': label, 'command': new_command}
-                        self.save_settings()
-                        print(self.settings['buttons'])
-
-        custom_buttons_table.cellDoubleClicked.connect(edit_custom_button)
 
         # Add a button to open a file manager to select a custom commands directory
         commands_button = QPushButton("Open Configurations Directory")
@@ -791,12 +1125,42 @@ class MainWindow(QMainWindow):
         self.settings_layout.addWidget(reset_button)
 
         def reset_to_defaults() -> None:
-            self.settings = self.default_settings.copy()
-            # Update table
-            self.save_settings()
-            self.set_style()
-            self.tab_settings_set()
-            # QMessageBox.information(self, "Settings Reset", "Settings have been reset to defaults. Please restart the application for all changes to take effect.")
+            # First confirmation
+            reply = QMessageBox.question(
+                self,
+                "Reset to Defaults",
+                "Are you sure you want to reset all settings to default values?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            
+            if reply == QMessageBox.Yes:
+                # Ask about backup
+                backup_reply = QMessageBox.question(
+                    self,
+                    "Backup Current Settings",
+                    "Would you like to backup your current settings before resetting?\n\nNote: Only one backup can be stored. This will overwrite any previous backup.",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.Yes
+                )
+                
+                if backup_reply == QMessageBox.Yes:
+                    # Save backup
+                    backup_file = os.path.join(self.app_configs_path, "settings_backup.yaml")
+                    try:
+                        with open(backup_file, "w") as f:
+                            yaml.dump(self.settings, f, default_flow_style=False)
+                        QMessageBox.information(self, "Backup Saved", "Current settings have been backed up to settings_backup.yaml")
+                    except Exception as e:
+                        QMessageBox.critical(self, "Backup Error", f"Failed to backup settings: {e}")
+                        return
+                
+                # Reset to defaults
+                self.settings = self.default_settings.copy()
+                self.save_settings()
+                self.set_style()
+                self.tab_settings_set()
+                QMessageBox.information(self, "Settings Reset", "Settings have been reset to defaults.")
 
         reset_button.clicked.connect(reset_to_defaults)
 
@@ -947,6 +1311,12 @@ class MainWindow(QMainWindow):
         # Right layout: Response display
         self.response_display = QTextEdit()
         self.response_display.setReadOnly(True)
+        max_lines = self.settings.get('general', {}).get('max_output_lines', 10000)
+        doc = self.response_display.document()
+        if doc:
+            doc.setMaximumBlockCount(max_lines)
+        self.response_display.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.response_display.customContextMenuRequested.connect(self.show_output_context_menu)
         self.middle_layout.addWidget(self.response_display)
 
     def create_bottom_panel(self) -> None:
@@ -960,17 +1330,21 @@ class MainWindow(QMainWindow):
         # Predefined commands
         predefined_layout = QHBoxLayout()
 
-        for key, button in self.settings["buttons"].items():
+        for key, button in self.settings["quick_buttons"].items():
             if isinstance(button, dict):
                 label = button.get('label', '')
                 tooltip = button.get('tooltip', '')
                 command = button.get('command', '')
 
-                btn = QPushButton(label)
+                btn = QPushButton(label if label else "---")
                 btn.setToolTip(tooltip)
-                if not label:
-                    btn.setDisabled(True)
-                btn.clicked.connect(lambda _, cmd=command: self.send_predefined_command(cmd))
+                btn.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+                btn.customContextMenuRequested.connect(lambda pos, k=key: self.show_button_context_menu(pos, k))
+                
+                # Always keep button enabled so context menu works, but connect handler that checks for command
+                btn.clicked.connect(lambda _, k=key: self.execute_button_command(k))
+                
+                self.custom_buttons[key] = btn
                 predefined_layout.addWidget(btn)
 
 
@@ -1006,9 +1380,223 @@ class MainWindow(QMainWindow):
         connected_time_container.addStretch()
         status_layout.addLayout(connected_time_container)
 
+        # Macro status
+        self.macro_status_label = QLabel("Macro: Idle")
+        macro_status_container = QHBoxLayout()
+        macro_status_container.addWidget(self.macro_status_label)
+        status_layout.addLayout(macro_status_container)
+
         bottom_layout.addLayout(status_layout)
 
         self.main_layout.addLayout(bottom_layout)
+
+    def save_checkbox_state(self, setting_name: str, value: bool) -> None:
+        """
+        Saves checkbox state to settings.
+        """
+        self.settings['general'][setting_name] = value
+        self.save_settings()
+
+    def save_current_tab(self, index: int) -> None:
+        """
+        Saves the current tab index to settings.
+        """
+        self.settings['general']['last_tab_index'] = index
+        self.save_settings()
+
+    def show_output_context_menu(self, pos) -> None:
+        """
+        Shows a context menu for the output display with options to toggle hex/text and timestamps.
+        """
+        menu = QMenu(self)
+        
+        # Copy and Select All actions
+        copy_action = QAction("Copy", self)
+        copy_action.triggered.connect(self.response_display.copy)
+        copy_action.setEnabled(self.response_display.textCursor().hasSelection())
+        
+        select_all_action = QAction("Select All", self)
+        select_all_action.triggered.connect(self.response_display.selectAll)
+        
+        menu.addAction(copy_action)
+        menu.addAction(select_all_action)
+        menu.addSeparator()
+        
+        # Display format toggle
+        current_format = self.settings.get('general', {}).get('display_format', 'text')
+        if current_format == 'text':
+            format_action = QAction("Switch to Hex Display", self)
+            format_action.triggered.connect(lambda: self.toggle_display_format('hex'))
+        else:
+            format_action = QAction("Switch to Text Display", self)
+            format_action.triggered.connect(lambda: self.toggle_display_format('text'))
+        
+        # Timestamp toggle
+        show_timestamps = self.settings.get('general', {}).get('show_timestamps', False)
+        if show_timestamps:
+            timestamp_action = QAction("Hide Timestamps", self)
+            timestamp_action.triggered.connect(lambda: self.toggle_timestamps(False))
+        else:
+            timestamp_action = QAction("Show Timestamps", self)
+            timestamp_action.triggered.connect(lambda: self.toggle_timestamps(True))
+        
+        menu.addAction(format_action)
+        menu.addAction(timestamp_action)
+        
+        menu.exec_(self.response_display.mapToGlobal(pos))
+
+    def toggle_display_format(self, new_format: str) -> None:
+        """
+        Toggles between text and hex display format.
+        """
+        self.settings['general']['display_format'] = new_format
+        self.save_settings()
+        QMessageBox.information(
+            self,
+            "Display Format Changed",
+            f"Display format changed to {new_format.upper()}.\nNew messages will be displayed in {new_format.upper()} format."
+        )
+
+    def toggle_timestamps(self, show: bool) -> None:
+        """
+        Toggles timestamp display for output messages.
+        """
+        self.settings['general']['show_timestamps'] = show
+        self.save_settings()
+        status = "enabled" if show else "disabled"
+        QMessageBox.information(
+            self,
+            "Timestamp Display Changed",
+            f"Timestamps have been {status}.\nNew messages will {'include' if show else 'not include'} timestamps."
+        )
+
+    def execute_button_command(self, key: str) -> None:
+        """
+        Executes the command associated with a quick button key, if it exists.
+        """
+        button_settings = self.settings['quick_buttons'].get(key, {})
+        command = button_settings.get('command', '')
+        if command:
+            self.send_predefined_command(command)
+
+    def show_button_context_menu(self, pos, key: str) -> None:
+        """
+        Shows a context menu for the custom buttons with Edit and Clear options.
+        """
+        btn = self.custom_buttons.get(key)
+        if not btn:
+            return
+            
+        menu = QMenu(self)
+        edit_action = QAction("Edit", self)
+        clear_action = QAction("Clear", self)
+        
+        edit_action.triggered.connect(lambda: self.edit_button(key))
+        clear_action.triggered.connect(lambda: self.clear_button_functionality(key))
+        
+        menu.addAction(edit_action)
+        menu.addAction(clear_action)
+        
+        menu.exec_(btn.mapToGlobal(pos))
+
+    def edit_button(self, key: str) -> None:
+        """
+        Opens a dialog to edit the quick button's name and command.
+        """
+        current_settings = self.settings['quick_buttons'].get(key, {})
+        current_label = current_settings.get('label', '')
+        current_command = current_settings.get('command', '')
+        
+        # Create a custom dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Edit Quick Button")
+        dialog.setModal(True)
+        dialog_layout = QVBoxLayout(dialog)
+        
+        # Name field
+        name_label = QLabel("Button Name:")
+        name_label.setToolTip("The text to display on the button")
+        name_input = QLineEdit(current_label)
+        name_input.setPlaceholderText("Enter button text (e.g., 'Status', 'Reset')")
+        name_input.setToolTip("The text to display on the button")
+        dialog_layout.addWidget(name_label)
+        dialog_layout.addWidget(name_input)
+        
+        # Command field
+        command_label = QLabel("Command:")
+        command_label.setToolTip("The command to execute when the button is clicked")
+        command_input = QLineEdit(current_command)
+        command_input.setPlaceholderText("Enter command (e.g., 'AT+CSQ', 'AT+CPIN?')")
+        command_input.setToolTip("The command to execute when the button is clicked")
+        dialog_layout.addWidget(command_label)
+        dialog_layout.addWidget(command_input)
+        
+        # Tooltip field
+        current_tooltip = current_settings.get('tooltip', '')
+        tooltip_label = QLabel("Tooltip:")
+        tooltip_label.setToolTip("The tooltip to show when hovering over the button")
+        tooltip_input = QLineEdit(current_tooltip)
+        tooltip_input.setPlaceholderText("Enter tooltip description (optional)")
+        tooltip_input.setToolTip("The tooltip to show when hovering over the button")
+        dialog_layout.addWidget(tooltip_label)
+        dialog_layout.addWidget(tooltip_input)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        ok_button = QPushButton("OK")
+        cancel_button = QPushButton("Cancel")
+        button_layout.addWidget(ok_button)
+        button_layout.addWidget(cancel_button)
+        dialog_layout.addLayout(button_layout)
+        
+        def on_ok():
+            new_label = name_input.text().strip()
+            new_command = command_input.text().strip()
+            new_tooltip = tooltip_input.text().strip()
+            
+            # Update settings
+            self.settings['quick_buttons'][key] = {
+                'label': new_label,
+                'command': new_command,
+                'tooltip': new_tooltip
+            }
+            self.save_settings()
+            
+            # Update button
+            btn = self.custom_buttons.get(key)
+            if btn:
+                if new_label and new_command:
+                    btn.setText(new_label)
+                else:
+                    btn.setText("---")
+                btn.setToolTip(new_tooltip)
+            
+            dialog.accept()
+        
+        def on_cancel():
+            dialog.reject()
+        
+        ok_button.clicked.connect(on_ok)
+        cancel_button.clicked.connect(on_cancel)
+        
+        dialog.exec_()
+
+    def clear_button_functionality(self, key: str) -> None:
+        """
+        Clears the quick button functionality, sets text to '---'.
+        """
+        # Update settings
+        self.settings['quick_buttons'][key] = {
+            'label': '',
+            'command': '',
+            'tooltip': ''
+        }
+        self.save_settings()
+        
+        # Update button
+        btn = self.custom_buttons.get(key)
+        if btn:
+            btn.setText("---")
 
     def save_output(self) -> None:
         """
@@ -1060,6 +1648,25 @@ class MainWindow(QMainWindow):
                 settings = yaml.safe_load(f)
                 # print(f"Loaded settings: {settings}")
             if settings:
+                # Migrate from old 'buttons' to 'quick_buttons' format
+                if 'buttons' in settings and 'quick_buttons' not in settings:
+                    settings['quick_buttons'] = settings.pop('buttons')
+                
+                # Remove hard-coded options from settings if they exist
+                if 'general' in settings:
+                    options_to_remove = [
+                        'options-auto_clear_output',
+                        'options-data_bits',
+                        'options-flow_control',
+                        'options-maximized',
+                        'options-open_mode',
+                        'options-parity',
+                        'options-stop_bits',
+                        'options-tx_line_ending'
+                    ]
+                    for option in options_to_remove:
+                        settings['general'].pop(option, None)
+                
                 self.settings = settings
                 # print(f"Settings loaded: {self.settings}")
             
@@ -1071,8 +1678,44 @@ class MainWindow(QMainWindow):
         return [port.device for port in ports if "ttyS" not in port.device]
 
     def print_to_display(self, message: str) -> None:
-        if self.settings.get("general", {}).get("reveal_hidden_char", False):
-            message = self.reveal_hidden_characters(message)
+        # Store original message for processing
+        original_message = message
+        timestamp_prefix = ""
+        flow_indicator = ""
+        
+        # Add timestamp if enabled
+        if self.settings.get("general", {}).get("show_timestamps", False):
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]  # milliseconds
+            timestamp_prefix = f"[{timestamp}] "
+        
+        # Extract flow indicator (< or >) if present
+        if original_message.startswith("< "):
+            flow_indicator = "< "
+            original_message = original_message[2:]
+        elif original_message.startswith("> "):
+            flow_indicator = "> "
+            original_message = original_message[2:]
+        
+        # Convert to hex if enabled
+        display_format = self.settings.get("general", {}).get("display_format", "text")
+        if display_format == "hex":
+            # Convert only the message content to hex
+            try:
+                hex_representation = ' '.join(f'{ord(c):02X}' for c in original_message.strip())
+                message = f"{timestamp_prefix}{flow_indicator}{hex_representation}"
+            except:
+                # If conversion fails, keep original with timestamp and flow indicator
+                message = f"{timestamp_prefix}{flow_indicator}{original_message}"
+        else:
+            # Text mode - apply reveal hidden characters if enabled
+            if self.settings.get("general", {}).get("reveal_hidden_char", False):
+                original_message = self.reveal_hidden_characters(flow_indicator + original_message)
+                # Remove flow indicator as it was added back by reveal_hidden_characters
+                if original_message.startswith(flow_indicator):
+                    original_message = original_message[len(flow_indicator):]
+            message = f"{timestamp_prefix}{flow_indicator}{original_message}"
+        
         self.response_display.append(message.strip())
 
     def reveal_hidden_characters(self, message: str) -> str:
@@ -1117,13 +1760,23 @@ class MainWindow(QMainWindow):
 
         # Auto-reconnect if needed
         if self.auto_reconnect_checkbox.isChecked():
-            port = self.port_combo.currentText()
-            if port in current_ports and (not self.serial_port or not self.serial_port.is_open):
-                self.print_to_display("Attempting auto-reconnect...")
-                try:
-                    self.connect_serial()
-                except Exception as e:
-                    self.print_to_display(f"Auto-reconnect failed: {e}")
+            # Use the last connected port from settings, not the current combo selection
+            last_port = self.settings.get('general', {}).get('last_serial_port', '')
+            
+            # Only attempt reconnect if:
+            # 1. We have a saved port
+            # 2. The saved port is available in current ports
+            # 3. Serial port is not already open
+            if last_port and last_port in current_ports and (not self.serial_port or not self.serial_port.is_open):
+                # Set the combo box to the correct port before reconnecting
+                index = self.port_combo.findText(last_port)
+                if index >= 0:
+                    self.port_combo.setCurrentIndex(index)
+                    self.print_to_display(f"Attempting auto-reconnect to {last_port}...")
+                    try:
+                        self.connect_serial()
+                    except Exception as e:
+                        self.print_to_display(f"Auto-reconnect failed: {e}")
 
     def toggle_connection(self) -> None:
         if self.serial_port and self.serial_port.is_open:
@@ -1178,6 +1831,10 @@ class MainWindow(QMainWindow):
         if self.settings.get("general", {}).get("last-baudrate", 115200) != baud_rate:
             self.settings["general"]["last-baudrate"] = baud_rate
             self.save_settings()
+        
+        # Save last connected serial port
+        self.settings["general"]["last_serial_port"] = port
+        self.save_settings()
 
         if baud_rate == "Custom":
             baud_rate = self.settings.get("general", {}).get("custom-baudrate", 115200)
@@ -1213,6 +1870,9 @@ class MainWindow(QMainWindow):
 
             self.connected_time_seconds = 0
             self.connected_time_timer.start(1000)
+            
+            # Display connection message
+            self.print_to_display(f"Serial connection established: {port} @ {baud_rate} baud")
 
         except Exception as e:
             QMessageBox.critical(self, "Connection Error", str(e))
@@ -1291,27 +1951,14 @@ class MainWindow(QMainWindow):
 
                 # Find the matching value from options
                 tx_value = next(
-                    value for key, value in self.settings['general']['options-tx_line_ending'] 
+                    value for key, value in self.OPTIONS['tx_line_ending'] 
                     if key == tx_key
                 )
                 tx_value = tx_value.encode().decode("unicode_escape")
                 self.serial_port.write((command + str(tx_value)).encode())
                 self.print_to_display(f"< {command}")
                 self.command_input.clear()
-            else:
-                # If command input is blank, get the last command from history and send it
-                history_file = os.path.expanduser("~/.command_history.txt")
-                if os.path.exists(history_file):
-                    with open(history_file, "r") as f:
-                        lines = f.read().splitlines()
-                    if lines:
-                        last_command = lines[-1]
-                        self.command_input.setText(last_command)
-                        self.send_command()
-                    else:
-                        QMessageBox.information(self, "No History", "No previous command found in history.")
-                else:
-                    QMessageBox.information(self, "No History", "No previous command found in history.")
+            # If empty, do nothing (no error)
 
     def send_predefined_command(self, command: str) -> None:
         self.command_input.setText(command)
@@ -1340,9 +1987,10 @@ class MainWindow(QMainWindow):
         """Clear the response display."""
         self.response_display.clear()
 
-    def closeEvent(self, a0: QCloseEvent) -> None:
-        self.disconnect_serial()
-        a0.accept()
+    def closeEvent(self, a0: QCloseEvent | None) -> None:  # type: ignore[override]
+        if a0 is not None:
+            self.disconnect_serial()
+            a0.accept()
 
     def update_connected_time(self) -> None:
         self.connected_time_seconds += 1
