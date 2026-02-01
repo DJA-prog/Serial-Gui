@@ -3,3 +3,4 @@ link_settings.yaml
 serial-monitor.desktop
 SerialCommunicationMonitor
 TEMP
+__pycache__

@@ -7,15 +7,20 @@ import platform
 from pathlib import Path
 import yaml
 from datetime import datetime
+import time
+import threading
+from typing import Optional, Dict, Any
+
+from MacroEditor import MacroEditor
 
 # import sip
 
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QListWidgetItem,
     QTextEdit, QLineEdit, QLabel, QComboBox, QMessageBox, QTableWidget, QTableWidgetItem, QInputDialog, QDialog, QListWidget, QCheckBox,
-    QSpinBox, QTabWidget, QFileDialog, QMenu, QAction
+    QSpinBox, QTabWidget, QFileDialog, QMenu, QAction, QScrollArea
 )
-from PyQt5.QtCore import QTimer, Qt
+from PyQt5.QtCore import QTimer, Qt, QPoint, pyqtSignal, pyqtSlot
 from PyQt5.QtGui import QMouseEvent, QCloseEvent, QKeyEvent
 from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QColorDialog, QAbstractItemView
 
@@ -95,6 +100,12 @@ class HistoryLineEdit(QLineEdit):
             super().keyPressEvent(a0)
 
 class MainWindow(QMainWindow):
+    # Qt signals for thread-safe communication
+    macro_print_signal = pyqtSignal(str)
+    macro_set_input_signal = pyqtSignal(str)
+    macro_send_command_signal = pyqtSignal()
+    macro_status_signal = pyqtSignal(str)
+    
     # Hard-coded options that should not be saved to settings.yaml
     OPTIONS = {
         'auto_clear_output': [[False, 0], [True, 1]],
@@ -219,6 +230,12 @@ class MainWindow(QMainWindow):
         # Timer for reading serial data
         self.timer = QTimer()
         self.timer.timeout.connect(self.read_serial_data)
+        
+        # Connect macro signals for thread-safe GUI updates
+        self.macro_print_signal.connect(self.print_to_display)
+        self.macro_set_input_signal.connect(self.command_input.setText)
+        self.macro_send_command_signal.connect(self.send_command)
+        self.macro_status_signal.connect(self.macro_status_label.setText)
 
     def set_style(self) -> None:
 
@@ -435,11 +452,13 @@ class MainWindow(QMainWindow):
 
         self.tab_commands()  # Create the commands tab
         self.tab_input_history()  # Create the command history tab
+        self.tab_macros()  # Create the macros tab
         self.tab_settings()
 
         # Add tables to tabs
         self.tab_widget.addTab(self.commands_tab, "Commands")
         self.tab_widget.addTab(self.command_history_tab, "History")
+        self.tab_widget.addTab(self.macros_tab, "Macros")
         self.tab_widget.addTab(self.settings_tab, "Settings")
         
         # Restore last active tab
@@ -604,6 +623,266 @@ class MainWindow(QMainWindow):
         clear_history_btn.setToolTip("Clear all command history")
         clear_history_btn.clicked.connect(self.confirm_clear_history)
         self.command_history_layout.addWidget(clear_history_btn)
+
+    def tab_macros(self) -> None:
+        """Create the macros tab with scrollable button list and create button"""
+        self.macros_tab = QWidget()
+        self.macros_layout = QVBoxLayout(self.macros_tab)
+        
+        # Create macros directory
+        self.macros_dir = Path(self.app_configs_path) / "macros"
+        self.macros_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Title
+        self.macros_layout.addWidget(QLabel("Macros"))
+        
+        # Scrollable area for macro buttons
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_widget = QWidget()
+        self.macro_buttons_layout = QVBoxLayout(scroll_widget)
+        self.macro_buttons_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        scroll_area.setWidget(scroll_widget)
+        self.macros_layout.addWidget(scroll_area)
+        
+        # Dictionary to track macro buttons
+        self.macro_buttons = {}
+        
+        # Create macro button at bottom
+        create_macro_btn = QPushButton("Create New Macro")
+        create_macro_btn.setToolTip("Create a new macro")
+        create_macro_btn.clicked.connect(self.create_new_macro)
+        self.macros_layout.addWidget(create_macro_btn)
+        
+        # Load existing macros
+        self.refresh_macro_list()
+    
+    def refresh_macro_list(self) -> None:
+        """Refresh the list of macro buttons"""
+        # Clear existing buttons
+        for button in self.macro_buttons.values():
+            button.deleteLater()
+        self.macro_buttons.clear()
+        
+        # Load macros from directory
+        if self.macros_dir.exists():
+            macro_files = sorted(self.macros_dir.glob("*.yaml"))
+            
+            for macro_file in macro_files:
+                try:
+                    with open(macro_file, 'r') as f:
+                        macro_data = yaml.safe_load(f)
+                    
+                    macro_name = macro_data.get('name', macro_file.stem)
+                    
+                    # Create button
+                    btn = QPushButton(macro_name)
+                    btn.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+                    btn.customContextMenuRequested.connect(
+                        lambda pos, path=macro_file: self.show_macro_context_menu(pos, path)
+                    )
+                    btn.clicked.connect(
+                        lambda _, path=macro_file: self.execute_macro(path)
+                    )
+                    
+                    self.macro_buttons_layout.addWidget(btn)
+                    self.macro_buttons[str(macro_file)] = btn
+                    
+                except Exception as e:
+                    print(f"Failed to load macro {macro_file}: {e}")
+    
+    def create_new_macro(self) -> None:
+        """Open the macro editor to create a new macro"""
+        accent_color = self.settings.get('general', {}).get('accent_color', '#1E90FF')
+        hover_color = self.settings.get('general', {}).get('hover_color', '#63B8FF')
+        editor = MacroEditor(self, accent_color=accent_color, hover_color=hover_color)
+        if editor.exec_() == QDialog.Accepted:
+            # Save the new macro
+            macro_name = editor.macro_name
+            if macro_name:
+                # Sanitize filename
+                safe_name = "".join(c for c in macro_name if c.isalnum() or c in (' ', '-', '_')).strip()
+                macro_path = self.macros_dir / f"{safe_name}.yaml"
+                
+                try:
+                    with open(macro_path, 'w') as f:
+                        yaml.dump(editor.macro_data, f, default_flow_style=False, sort_keys=False)
+                    QMessageBox.information(self, "Success", f"Macro '{macro_name}' created successfully!")
+                    self.refresh_macro_list()
+                except Exception as e:
+                    QMessageBox.critical(self, "Error", f"Failed to save macro: {e}")
+    
+    def show_macro_context_menu(self, pos: QPoint, macro_path: Path) -> None:
+        """Show context menu for a macro button"""
+        menu = QMenu(self)
+        
+        edit_action = QAction("Edit Macro", self)
+        edit_action.triggered.connect(lambda: self.edit_macro(macro_path))
+        menu.addAction(edit_action)
+        
+        delete_action = QAction("Delete Macro", self)
+        delete_action.triggered.connect(lambda: self.delete_macro(macro_path))
+        menu.addAction(delete_action)
+        
+        # Show menu at cursor position
+        sender = self.sender()
+        if sender and isinstance(sender, QWidget):
+            menu.exec_(sender.mapToGlobal(pos))
+    
+    def edit_macro(self, macro_path: Path) -> None:
+        """Open the macro editor to edit an existing macro"""
+        accent_color = self.settings.get('general', {}).get('accent_color', '#1E90FF')
+        hover_color = self.settings.get('general', {}).get('hover_color', '#63B8FF')
+        editor = MacroEditor(self, macro_path, accent_color=accent_color, hover_color=hover_color)
+        if editor.exec_() == QDialog.Accepted:
+            self.refresh_macro_list()
+    
+    def delete_macro(self, macro_path: Path) -> None:
+        """Delete a macro file"""
+        reply = QMessageBox.question(
+            self,
+            "Delete Macro",
+            f"Are you sure you want to delete '{macro_path.stem}'?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            try:
+                macro_path.unlink()
+                QMessageBox.information(self, "Success", "Macro deleted successfully!")
+                self.refresh_macro_list()
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to delete macro: {e}")
+    
+    def execute_macro(self, macro_path: Path) -> None:
+        """Execute a macro file"""
+        if not hasattr(self, 'serial_port') or not self.serial_port:
+            QMessageBox.warning(self, "Not Connected", "Please connect to a serial port first.")
+            return
+        
+        try:
+            with open(macro_path, 'r') as f:
+                macro_data = yaml.safe_load(f)
+            
+            macro_name = macro_data.get('name', macro_path.stem)
+            steps = macro_data.get('steps', [])
+            
+            if not steps:
+                QMessageBox.warning(self, "Empty Macro", "This macro has no steps.")
+                return
+            
+            # Execute macro in a separate thread to avoid blocking UI
+            thread = threading.Thread(target=self._execute_macro_steps, args=(macro_name, steps))
+            thread.daemon = True
+            thread.start()
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Execution Error", f"Failed to execute macro: {e}")
+    
+    def _print_to_display_threadsafe(self, message: str) -> None:
+        """Thread-safe wrapper for print_to_display using signal"""
+        self.macro_print_signal.emit(message)
+    
+    def _set_command_input_threadsafe(self, text: str) -> None:
+        """Thread-safe wrapper for setting command input using signal"""
+        self.macro_set_input_signal.emit(text)
+    
+    def _send_command_threadsafe(self) -> None:
+        """Thread-safe wrapper for send_command using signal"""
+        self.macro_send_command_signal.emit()
+    
+    def _update_macro_status_threadsafe(self, status: str) -> None:
+        """Thread-safe wrapper for updating macro status using signal"""
+        self.macro_status_signal.emit(status)
+    
+    def _execute_macro_steps(self, macro_name: str, steps: list) -> None:
+        """Execute macro steps in sequence"""
+        self._update_macro_status_threadsafe(f"Macro: Running '{macro_name}'")
+        self._print_to_display_threadsafe(f"══════════════════════════════════════")
+        self._print_to_display_threadsafe(f"  Executing Macro: {macro_name}")
+        self._print_to_display_threadsafe(f"══════════════════════════════════════")
+        
+        for i, step in enumerate(steps, 1):
+            try:
+                if 'input' in step:
+                    # Send command
+                    command = step['input']
+                    self._print_to_display_threadsafe(f"Step {i}: Send command '{command}'")
+                    self._set_command_input_threadsafe(command)
+                    time.sleep(0.05)  # Small delay to ensure setText completes
+                    self._send_command_threadsafe()
+                    time.sleep(0.1)  # Small delay for command to be sent
+                    
+                elif 'delay' in step:
+                    # Wait for specified time
+                    delay_ms = step['delay']
+                    self._print_to_display_threadsafe(f"Step {i}: Delay {delay_ms}ms")
+                    time.sleep(delay_ms / 1000.0)
+                    
+                elif 'output' in step:
+                    # Expect output
+                    output_config = step['output']
+                    expected = output_config.get('expected', '')
+                    timeout_ms = output_config.get('timeout', 1000)
+                    fail_action = output_config.get('fail')
+                    
+                    self._print_to_display_threadsafe(f"Step {i}: Expect '{expected}' (timeout {timeout_ms}ms)")
+                    
+                    # Wait and check for expected output
+                    received = self._wait_for_response(expected, timeout_ms / 1000.0)
+                    
+                    if not received:
+                        self._print_to_display_threadsafe(f"Step {i}: ✗ FAILED - Expected output not received")
+                        
+                        # Handle fail action
+                        if fail_action == "EXIT":
+                            self._print_to_display_threadsafe(f"══════════════════════════════════════")
+                            self._print_to_display_threadsafe(f"Macro EXITED (fail condition)")
+                            self._print_to_display_threadsafe(f"══════════════════════════════════════")
+                            self._update_macro_status_threadsafe("Macro: Idle")
+                            return
+                        elif isinstance(fail_action, dict) and 'input' in fail_action:
+                            # Send fail command
+                            fail_cmd = fail_action['input']
+                            self._print_to_display_threadsafe(f"Step {i}: Send recovery command '{fail_cmd}'")
+                            self._set_command_input_threadsafe(fail_cmd)
+                            time.sleep(0.05)
+                            self._send_command_threadsafe()
+                            time.sleep(0.1)
+                    else:
+                        self._print_to_display_threadsafe(f"Step {i}: ✓ SUCCESS - Received expected output")
+                        
+            except Exception as e:
+                self._print_to_display_threadsafe(f"Step {i}: ✗ ERROR - {e}")
+                self._update_macro_status_threadsafe("Macro: Idle")
+                return
+        
+        self._print_to_display_threadsafe(f"══════════════════════════════════════")
+        self._print_to_display_threadsafe(f"Macro '{macro_name}' COMPLETED")
+        self._print_to_display_threadsafe(f"══════════════════════════════════════")
+        self._update_macro_status_threadsafe("Macro: Idle")
+    
+    def _wait_for_response(self, expected: str, timeout: float) -> bool:
+        """Wait for expected response from serial port"""
+        start_time = time.time()
+        received_buffer = ""
+        
+        while time.time() - start_time < timeout:
+            if hasattr(self, 'serial_port') and self.serial_port:
+                try:
+                    if self.serial_port.in_waiting > 0:
+                        data = self.serial_port.read(self.serial_port.in_waiting)
+                        received_buffer += data.decode('utf-8', errors='ignore')
+                        
+                        if expected in received_buffer:
+                            return True
+                except:
+                    pass
+            
+            time.sleep(0.01)  # Small sleep to avoid busy waiting
+        
+        return False
 
     def tab_settings_set(self) -> None:
         settings = self.settings.get("general", {})
@@ -1006,6 +1285,12 @@ class MainWindow(QMainWindow):
         connected_time_container.addWidget(self.connected_time_label)
         connected_time_container.addStretch()
         status_layout.addLayout(connected_time_container)
+
+        # Macro status
+        self.macro_status_label = QLabel("Macro: Idle")
+        macro_status_container = QHBoxLayout()
+        macro_status_container.addWidget(self.macro_status_label)
+        status_layout.addLayout(macro_status_container)
 
         bottom_layout.addLayout(status_layout)
 
@@ -1491,6 +1776,9 @@ class MainWindow(QMainWindow):
 
             self.connected_time_seconds = 0
             self.connected_time_timer.start(1000)
+            
+            # Display connection message
+            self.print_to_display(f"Serial connection established: {port} @ {baud_rate} baud")
 
         except Exception as e:
             QMessageBox.critical(self, "Connection Error", str(e))
