@@ -1384,11 +1384,30 @@ class MainWindow(QMainWindow):
         self.macro_status_label = QLabel("Macro: Idle")
         macro_status_container = QHBoxLayout()
         macro_status_container.addWidget(self.macro_status_label)
+        macro_status_container.addStretch()
         status_layout.addLayout(macro_status_container)
+
+        # Line count percentage
+        self.line_count_label = QLabel("Lines: 0 / 10000 (0%)")
+        line_count_container = QHBoxLayout()
+        line_count_container.addWidget(self.line_count_label)
+        line_count_container.addStretch()
+        status_layout.addLayout(line_count_container)
 
         bottom_layout.addLayout(status_layout)
 
         self.main_layout.addLayout(bottom_layout)
+
+    def update_line_count_display(self) -> None:
+        """
+        Updates the line count percentage display in the status bar.
+        """
+        doc = self.response_display.document()
+        if doc:
+            current_lines = doc.blockCount()
+            max_lines = self.settings.get('general', {}).get('max_output_lines', 10000)
+            percentage = (current_lines / max_lines * 100) if max_lines > 0 else 0
+            self.line_count_label.setText(f"Lines: {current_lines} / {max_lines} ({percentage:.1f}%)")
 
     def save_checkbox_state(self, setting_name: str, value: bool) -> None:
         """
@@ -1717,6 +1736,7 @@ class MainWindow(QMainWindow):
             message = f"{timestamp_prefix}{flow_indicator}{original_message}"
         
         self.response_display.append(message.strip())
+        self.update_line_count_display()
 
     def reveal_hidden_characters(self, message: str) -> str:
         """
@@ -1986,6 +2006,7 @@ class MainWindow(QMainWindow):
     def clear_output(self) -> None:
         """Clear the response display."""
         self.response_display.clear()
+        self.update_line_count_display()
 
     def closeEvent(self, a0: QCloseEvent | None) -> None:  # type: ignore[override]
         if a0 is not None:
