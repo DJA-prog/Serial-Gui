@@ -3,7 +3,10 @@ Macro Editor - A Scratch-like drag-and-drop interface for creating serial commun
 """
 import yaml
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from StyleManager import StyleManager
 
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QLabel,
@@ -17,12 +20,13 @@ from PyQt5.QtGui import QDrag, QPalette, QColor, QMouseEvent, QDragEnterEvent, Q
 class MacroBlock(QFrame):
     """Base class for draggable macro blocks"""
     
-    def __init__(self, block_type: str, label: str, parent=None, accent_color: str = "#1E90FF", hover_color: str = "#63B8FF"):
+    def __init__(self, block_type: str, label: str, parent=None, accent_color: str = "#1E90FF", hover_color: str = "#63B8FF", background_color: str = "#1E1E1E"):
         super().__init__(parent)
         self.block_type = block_type
         self.label_text = label
         self.accent_color = accent_color
         self.hover_color = hover_color
+        self.background_color = background_color
         self.setFrameStyle(QFrame.Box | QFrame.Raised)
         self.setLineWidth(2)
         self.setMinimumHeight(60)
@@ -47,7 +51,7 @@ class MacroBlock(QFrame):
 
         self.setStyleSheet(f"""
             QFrame {{
-                background-color: #000005;
+                background-color: {self.background_color};
                 border: 1px solid {self.accent_color};
                 border-radius: 5px;
             }}
@@ -95,8 +99,8 @@ class MacroBlock(QFrame):
 class InputBlock(MacroBlock):
     """Block for sending input commands"""
     
-    def __init__(self, parent=None, command: str = "", accent_color: str = "#1E90FF", hover_color: str = "#63B8FF"):
-        super().__init__("input", "Send Command", parent, accent_color, hover_color)
+    def __init__(self, parent=None, command: str = "", accent_color: str = "#1E90FF", hover_color: str = "#63B8FF", background_color: str = "#1E1E1E"):
+        super().__init__("input", "Send Command", parent, accent_color, hover_color, background_color)
         self.command_input.setText(command)
     
     def setup_block_content(self, layout: QHBoxLayout):
@@ -118,8 +122,8 @@ class InputBlock(MacroBlock):
 class DelayBlock(MacroBlock):
     """Block for adding delays"""
     
-    def __init__(self, parent=None, delay_ms: int = 1000, accent_color: str = "#1E90FF", hover_color: str = "#63B8FF"):
-        super().__init__("delay", "Delay", parent, accent_color, hover_color)
+    def __init__(self, parent=None, delay_ms: int = 1000, accent_color: str = "#1E90FF", hover_color: str = "#63B8FF", background_color: str = "#1E1E1E"):
+        super().__init__("delay", "Delay", parent, accent_color, hover_color, background_color)
         self.delay_spinbox.setValue(delay_ms)
     
     def setup_block_content(self, layout: QHBoxLayout):
@@ -146,8 +150,8 @@ class DelayBlock(MacroBlock):
 class OutputBlock(MacroBlock):
     """Block for expecting output with conditional logic"""
     
-    def __init__(self, parent=None, expected: str = "", timeout: int = 1000, accent_color: str = "#1E90FF", hover_color: str = "#63B8FF"):
-        super().__init__("output", "Expect Output", parent, accent_color, hover_color)
+    def __init__(self, parent=None, expected: str = "", timeout: int = 1000, accent_color: str = "#1E90FF", hover_color: str = "#63B8FF", background_color: str = "#1E1E1E"):
+        super().__init__("output", "Expect Output", parent, accent_color, hover_color, background_color)
         self.expected_input.setText(expected)
         self.timeout_spinbox.setValue(timeout)
     
@@ -220,10 +224,12 @@ class OutputBlock(MacroBlock):
 class MacroCanvas(QWidget):
     """Canvas where macro blocks are dropped and arranged"""
     
-    def __init__(self, parent=None, accent_color: str = "#1E90FF", hover_color: str = "#63B8FF"):
+    def __init__(self, parent=None, accent_color: str = "#1E90FF", hover_color: str = "#63B8FF", background_color: str = "#1E1E1E", font_color: str = "#FFFFFF"):
         super().__init__(parent)
         self.accent_color = accent_color
         self.hover_color = hover_color
+        self.background_color = background_color
+        self.font_color = font_color
         # self.setAcceptDrops(True)
         self.setFixedWidth(600)
 
@@ -247,11 +253,11 @@ class MacroCanvas(QWidget):
         block: Optional[MacroBlock] = None
 
         if block_type == "input":
-            block = InputBlock(self.container, kwargs.get('command', ''), self.accent_color, self.hover_color)
+            block = InputBlock(self.container, kwargs.get('command', ''), self.accent_color, self.hover_color, self.background_color)
         elif block_type == "delay":
-            block = DelayBlock(self.container, kwargs.get('delay', 1000), self.accent_color, self.hover_color)
+            block = DelayBlock(self.container, kwargs.get('delay', 1000), self.accent_color, self.hover_color, self.background_color)
         elif block_type == "output":
-            block = OutputBlock(self.container, kwargs.get('expected', ''), kwargs.get('timeout', 1000), self.accent_color, self.hover_color)
+            block = OutputBlock(self.container, kwargs.get('expected', ''), kwargs.get('timeout', 1000), self.accent_color, self.hover_color, self.background_color)
             
         if block:
             # Add vertical button group (Up, Close, Down)
@@ -263,21 +269,21 @@ class MacroCanvas(QWidget):
             up_btn = QPushButton("↑")
             up_btn.setSizePolicy(sizePolicy)
             up_btn.setFixedWidth(20)
-            up_btn.setStyleSheet("border-radius: 0;")
+            up_btn.setStyleSheet(f"border-radius: 0; background-color: {self.accent_color}; color: {self.font_color};")
             up_btn.clicked.connect(lambda _, b=block: self.move_block_up(b))
             btn_col.addWidget(up_btn, 1)
 
             close_btn = QPushButton("✕")
             close_btn.setSizePolicy(sizePolicy)
             close_btn.setFixedWidth(20)
-            close_btn.setStyleSheet("border-radius: 0;")
+            close_btn.setStyleSheet(f"border-radius: 0; background-color: {self.accent_color}; color: {self.font_color};")
             close_btn.clicked.connect(lambda _, b=block: self.remove_block(b))
             btn_col.addWidget(close_btn, 1)
 
             down_btn = QPushButton("↓")
             down_btn.setSizePolicy(sizePolicy)
             down_btn.setFixedWidth(20)
-            down_btn.setStyleSheet("border-radius: 0;")
+            down_btn.setStyleSheet(f"border-radius: 0; background-color: {self.accent_color}; color: {self.font_color};")
             down_btn.clicked.connect(lambda _, b=block: self.move_block_down(b))
             btn_col.addWidget(down_btn, 1)
 
@@ -350,12 +356,19 @@ class MacroCanvas(QWidget):
 class MacroEditor(QDialog):
     """Main macro editor dialog"""
     
-    def __init__(self, parent=None, macro_path: Optional[Path] = None, macro_name: str = "", accent_color: str = "#1E90FF", hover_color: str = "#63B8FF"):
+    def __init__(self, parent=None, macro_path: Optional[Path] = None, macro_name: str = "", style_manager: Optional['StyleManager'] = None):
         super().__init__(parent)
         self.macro_path = macro_path
         self.macro_name = macro_name
-        self.accent_color = accent_color
-        self.hover_color = hover_color
+        self.style_manager = style_manager
+        
+        # Get colors from style_manager if available
+        if style_manager:
+            self.accent_color = style_manager.accent_color
+            self.hover_color = style_manager.hover_color
+        else:
+            self.accent_color = "#1E90FF"
+            self.hover_color = "#63B8FF"
         
         self.setWindowTitle("Macro Editor")
         self.resize(750, 600)
@@ -384,7 +397,11 @@ class MacroEditor(QDialog):
         scroll_area.setWidgetResizable(True)
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.canvas = MacroCanvas(accent_color=self.accent_color, hover_color=self.hover_color)
+        
+        # Get background and font colors from style_manager if available
+        background_color = self.style_manager.bg_secondary if self.style_manager else "#1E1E1E"
+        font_color = self.style_manager.font_color if self.style_manager else "#FFFFFF"
+        self.canvas = MacroCanvas(accent_color=self.accent_color, hover_color=self.hover_color, background_color=background_color, font_color=font_color)
         scroll_area.setWidget(self.canvas.container)
         content_layout.addWidget(scroll_area, 2)
         
@@ -412,6 +429,14 @@ class MacroEditor(QDialog):
         # Load existing macro if provided
         if macro_path and macro_path.exists():
             self.load_macro(macro_path)
+        
+        # Apply styling
+        self.apply_style()
+    
+    def apply_style(self):
+        """Apply stylesheet from style manager"""
+        if self.style_manager:
+            self.setStyleSheet(self.style_manager.get_dialog_stylesheet())
     
     def create_block_palette(self) -> QWidget:
         """Create the left panel with block type buttons"""

@@ -13,6 +13,8 @@ from typing import Optional, Dict, Any
 from queue import Queue
 
 from MacroEditor import MacroEditor
+from CommandsEditor import CommandsEditor
+from StyleManager import StyleManager
 
 # import sip
 
@@ -212,11 +214,15 @@ class MainWindow(QMainWindow):
                 'accent_color': '#1E90FF', 
                 'auto_clear_output': False,
                 'auto_reconnect': False,
+                'background_color': '#121212',
+                'background_secondary': '#1E1E1E',
+                'background_tertiary': '#2A2A2A',
                 'data_bits': 8,
                 'display_format': 'text',
                 'dtr_state': False,
                 'flow_control': 'None', 
                 'font_color': '#FFFFFF',
+                'font_size': 10,
                 'hover_color': '#63B8FF',
                 'last_serial_port': '',
                 'last_tab_index': 0,
@@ -235,6 +241,9 @@ class MainWindow(QMainWindow):
         }
         self.default_settings = self.settings.copy()
         self.load_settings()  # Load settings from YAML file
+        
+        # Initialize StyleManager
+        self.style_manager = StyleManager(self.settings['general'])
 
 
         if self.settings['general'].get('maximized', False):
@@ -296,149 +305,10 @@ class MainWindow(QMainWindow):
         self.macro_status_signal.connect(self.macro_status_label.setText)
 
     def set_style(self) -> None:
-
-        style: str = """
-            QMainWindow {
-            background-color: #121212;  /* Dark background */
-            color: #FFFFFF;  /* White text */
-            }
-            QLabel {
-            color: #FFFFFF;  /* White text */
-            }
-            QLineEdit, QTextEdit, QTableWidget {
-            background-color: #1E1E1E;  /* Slightly lighter dark background */
-            color: #FFFFFF;  /* White text */
-            border: 1px solid #1E90FF;  /* Electric blue border */
-            border-radius: 5px;
-            }
-            QHeaderView::section {
-            background-color: #1E90FF;  /* Electric blue header */
-            color: #FFFFFF;  /* White text */
-            border: 1px solid #1E90FF;
-            font-weight: bold;
-            padding: 4px;
-            }
-            QComboBox {
-            background-color: #2A2A2A;  /* Slightly lighter background for better visibility */
-            color: #FFFFFF;  /* White text */
-            border: 1px solid #1E90FF;  /* Electric blue border */
-            border-radius: 5px;
-            padding: 2px;
-            }
-            QComboBox QAbstractItemView {
-            background-color: #2A2A2A;  /* Dropdown background */
-            color: #FFFFFF;  /* Dropdown text color */
-            border: 1px solid #1E90FF;  /* Electric blue border */
-            selection-background-color: #1E90FF;  /* Electric blue selection */
-            selection-color: #FFFFFF;  /* White text for selection */
-            }
-            QCheckBox {
-            color: #FFFFFF;  /* White text */
-            }
-            QCheckBox::indicator {
-            border: 1px solid #1E90FF;  /* Electric blue border */
-            width: 15px;
-            height: 15px;
-            border-radius: 3px;
-            background-color: #1E1E1E;  /* Dark background */
-            }
-            QCheckBox::indicator:checked {
-            background-color: #1E90FF;  /* Electric blue when checked */
-            }
-            QTableWidget::item {
-            color: #FFFFFF;  /* White text */
-            }
-            QTableWidget::item:selected {
-            background-color: #1E90FF;  /* Electric blue selection */
-            color: #FFFFFF;  /* White text */
-            }
-            QScrollBar:vertical, QScrollBar:horizontal {
-            background-color: #1E1E1E;  /* Dark scrollbar background */
-            border: none;
-            width: 10px;
-            height: 10px;
-            }
-            QScrollBar::handle {
-            background-color: #1E90FF;  /* Electric blue scrollbar handle */
-            border-radius: 5px;
-            }
-            QScrollBar::handle:hover {
-            background-color: #63B8FF;  /* Lighter blue on hover */
-            }
-            QMessageBox {
-            background-color: #121212;  /* Dark background for popups */
-            color: #FFFFFF;  /* White text */
-            }
-            QInputDialog {
-            background-color: #121212;  /* Dark background for input dialogs */
-            color: #FFFFFF;  /* White text */
-            }
-            QDialog {
-            background-color: #121212;  /* Dark background for dialogs */
-            color: #FFFFFF;  /* White text */
-            }
-            QWidget {
-            background-color: #121212;
-            color: #FFFFFF;
-            }
-            QListWidget {
-            background-color: #1E1E1E;
-            color: #FFFFFF;
-            border: 1px solid #1E90FF;
-            border-radius: 5px;
-            }
-            QListWidget::item {
-            color: #FFFFFF;
-            }
-            QListWidget::item:selected {
-            background-color: #1E90FF;
-            color: #FFFFFF;
-            }
-            QListWidget::item:hover {
-            background-color: #1E90FF;
-            color: #FFFFFF;
-            }
-            QTabWidget::pane {
-            border: 1px solid #1E90FF;
-            border-bottom: none;
-            background: #121212;
-            }
-            QTabBar::tab {
-            background: #1E1E1E;
-            color: #FFFFFF;
-            border: 1px solid #1E90FF;
-            border-bottom: none;
-            border-top-left-radius: 5px;
-            border-top-right-radius: 5px;
-            border-bottom-left-radius: 0px;
-            border-bottom-right-radius: 0px;
-            padding: 6px;
-            min-width: 100px;
-            }
-            QTabBar::tab:selected {
-            background: #1E90FF;
-            color: #FFFFFF;
-            }
-            QTabBar::tab:hover {
-            background: #63B8FF;
-            color: #FFFFFF;
-            }
-
-            QPushButton {
-            background-color: #1E90FF;  /* Electric blue background */
-            color: #FFFFFF;  /* White text */
-            border: none;
-            border-radius: 5px;
-            padding: 5px;
-            }
-            QPushButton:hover {
-            background-color: #63B8FF;  /* Lighter blue on hover */
-            }
-        """
-        style = style.replace("#1E90FF", str(self.settings['general']['accent_color']))
-        style = style.replace("#63B8FF", str(self.settings['general']['hover_color']))
-        style = style.replace("#FFFFFF", str(self.settings['general'].get('font_color', '#FFFFFF')))
-
+        """Apply stylesheet using StyleManager"""
+        # Update StyleManager with current settings
+        self.style_manager.update_settings(self.settings['general'])
+        style = self.style_manager.get_main_window_stylesheet()
         self.setStyleSheet(style)
 
     def create_top_ribbon(self) -> None:
@@ -660,6 +530,21 @@ class MainWindow(QMainWindow):
 
         # Reload on change
         self.yaml_dropdown.currentTextChanged.connect(populate_command_lists)
+        
+        # --- Bottom buttons ---
+        bottom_buttons_layout = QHBoxLayout()
+        
+        new_list_btn = QPushButton("New Command List")
+        new_list_btn.setToolTip("Create a new command list")
+        new_list_btn.clicked.connect(self.create_new_command_list)
+        bottom_buttons_layout.addWidget(new_list_btn)
+        
+        edit_list_btn = QPushButton("Edit Selected List")
+        edit_list_btn.setToolTip("Edit the currently selected command list")
+        edit_list_btn.clicked.connect(self.edit_selected_command_list)
+        bottom_buttons_layout.addWidget(edit_list_btn)
+        
+        self.commands_layout.addLayout(bottom_buttons_layout)
 
     def tab_input_history(self) -> None:
         # Create a tab widget for command history
@@ -753,9 +638,7 @@ class MainWindow(QMainWindow):
     
     def create_new_macro(self) -> None:
         """Open the macro editor to create a new macro"""
-        accent_color = self.settings.get('general', {}).get('accent_color', '#1E90FF')
-        hover_color = self.settings.get('general', {}).get('hover_color', '#63B8FF')
-        editor = MacroEditor(self, accent_color=accent_color, hover_color=hover_color)
+        editor = MacroEditor(self, style_manager=self.style_manager)
         if editor.exec_() == QDialog.Accepted:
             # Save the new macro
             macro_name = editor.macro_name
@@ -791,9 +674,7 @@ class MainWindow(QMainWindow):
     
     def edit_macro(self, macro_path: Path) -> None:
         """Open the macro editor to edit an existing macro"""
-        accent_color = self.settings.get('general', {}).get('accent_color', '#1E90FF')
-        hover_color = self.settings.get('general', {}).get('hover_color', '#63B8FF')
-        editor = MacroEditor(self, macro_path, accent_color=accent_color, hover_color=hover_color)
+        editor = MacroEditor(self, macro_path, style_manager=self.style_manager)
         if editor.exec_() == QDialog.Accepted:
             self.refresh_macro_list()
     
@@ -814,6 +695,74 @@ class MainWindow(QMainWindow):
                 self.refresh_macro_list()
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to delete macro: {e}")
+    
+    def open_commands_editor(self) -> None:
+        """Open the commands editor"""
+        editor = CommandsEditor(self, self.app_configs_path, self.style_manager)
+        editor.exec_()
+        
+        # Refresh the commands dropdown after editor closes
+        self.refresh_commands_dropdown()
+    
+    def refresh_commands_dropdown(self) -> None:
+        """Refresh the commands dropdown with available YAML files"""
+        commands_dir = os.path.join(self.app_configs_path, "commands")
+        
+        # Store current selection
+        current_selection = self.yaml_dropdown.currentText()
+        
+        # Clear and repopulate
+        self.yaml_dropdown.clear()
+        yaml_files = [f for f in os.listdir(commands_dir) 
+                      if f.endswith(".yaml") and os.path.isfile(os.path.join(commands_dir, f))]
+        yaml_files.sort()
+        self.yaml_dropdown.addItems(yaml_files)
+        
+        # Restore selection if it still exists
+        if current_selection in yaml_files:
+            self.yaml_dropdown.setCurrentText(current_selection)
+    
+    def create_new_command_list(self) -> None:
+        """Create a new command list using the commands editor"""
+        editor = CommandsEditor(self, self.app_configs_path, self.style_manager)
+        # Start with empty lists - filename will be requested on save
+        editor.exec_()
+        
+        # Refresh the commands dropdown after editor closes
+        self.refresh_commands_dropdown()
+    
+    def edit_selected_command_list(self) -> None:
+        """Edit the currently selected command list"""
+        current_file = self.yaml_dropdown.currentText()
+        if not current_file:
+            QMessageBox.warning(self, "No Selection", "No command list selected. Please select a list or create a new one.")
+            return
+        
+        editor = CommandsEditor(self, self.app_configs_path, self.style_manager)
+        
+        # Load the selected file
+        filepath = self.app_configs_path / "commands" / current_file
+        try:
+            with open(filepath, 'r') as f:
+                data = yaml.safe_load(f)
+            
+            if not isinstance(data, dict):
+                raise ValueError("Invalid YAML format")
+            
+            editor.no_input_commands = data.get('no_input_commands', {})
+            editor.input_required_commands = data.get('input_required_commands', {})
+            editor.current_file = current_file
+            editor.refresh_lists()
+            editor.file_label.setText(f"File: {current_file}")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to open file: {e}")
+            return
+        
+        editor.exec_()
+        
+        # Refresh the commands dropdown after editor closes
+        self.refresh_commands_dropdown()
     
     def execute_macro(self, macro_path: Path) -> None:
         """Execute a macro file"""
@@ -958,36 +907,39 @@ class MainWindow(QMainWindow):
         # Row 3: font_color (color)
         font_color_item = QTableWidgetItem(str(settings.get("font_color", "#FFFFFF")))
         self.settings_table.setItem(3, 1, font_color_item)
-        # Row 4: maximized (bool)
+        # Row 4: background_color (color)
+        background_color_item = QTableWidgetItem(str(settings.get("background_color", "#121212")))
+        self.settings_table.setItem(4, 1, background_color_item)
+        # Row 5: maximized (bool)
         maximized_item = QTableWidgetItem(str(settings.get("maximized", False)))
-        self.settings_table.setItem(4, 1, maximized_item)
-        # Row 5: tx line ending
+        self.settings_table.setItem(5, 1, maximized_item)
+        # Row 6: tx line ending
         tx_line_ending_item = QTableWidgetItem(str(settings.get("tx_line_ending", "CRLN")))
-        self.settings_table.setItem(5, 1, tx_line_ending_item)
-        # Row 6: Data bits: 8,7,6,5
+        self.settings_table.setItem(6, 1, tx_line_ending_item)
+        # Row 7: Data bits: 8,7,6,5
         data_bits = QTableWidgetItem(str(settings.get("data_bits", "8")))
-        self.settings_table.setItem(6, 1, data_bits)
-        # Row 7: parity: None, Even, Odd, Space, Mark
+        self.settings_table.setItem(7, 1, data_bits)
+        # Row 8: parity: None, Even, Odd, Space, Mark
         parity = QTableWidgetItem(str(settings.get("parity", "None")))
-        self.settings_table.setItem(7, 1, parity)
-        # Row 8: Stop bits: 1, 2
+        self.settings_table.setItem(8, 1, parity)
+        # Row 9: Stop bits: 1, 2
         stop_bits = QTableWidgetItem(str(settings.get("stop_bits", "1")))
-        self.settings_table.setItem(8, 1, stop_bits)
-        # Row 9: Flow Control: None, Hardware, Software
+        self.settings_table.setItem(9, 1, stop_bits)
+        # Row 10: Flow Control: None, Hardware, Software
         flow_control = QTableWidgetItem(str(settings.get("flow_control", "None")))
-        self.settings_table.setItem(9, 1, flow_control)
-        # Row 10: Open mode: Read/Write, Read only, Write only
+        self.settings_table.setItem(10, 1, flow_control)
+        # Row 11: Open mode: Read/Write, Read only, Write only
         open_mode = QTableWidgetItem(str(settings.get("open_mode", "Read/Write")))
-        self.settings_table.setItem(10, 1, open_mode)
-        # Row 11: reveal_hidden_char (bool)
+        self.settings_table.setItem(11, 1, open_mode)
+        # Row 12: reveal_hidden_char (bool)
         reveal_hidden_char_item = QTableWidgetItem(str(settings.get("reveal_hidden_char", False)))
-        self.settings_table.setItem(11, 1, reveal_hidden_char_item)
-        # Row 12: max_output_lines (int)
+        self.settings_table.setItem(12, 1, reveal_hidden_char_item)
+        # Row 13: max_output_lines (int)
         max_output_lines_item = QTableWidgetItem(str(settings.get("max_output_lines", 10000)))
-        self.settings_table.setItem(12, 1, max_output_lines_item)
-        # Row 13: custom-baudrate (int)
+        self.settings_table.setItem(13, 1, max_output_lines_item)
+        # Row 14: custom-baudrate (int)
         custom_baud_rate_item = QTableWidgetItem(str(settings.get("custom-baudrate", 115200)))
-        self.settings_table.setItem(13, 1, custom_baud_rate_item)
+        self.settings_table.setItem(14, 1, custom_baud_rate_item)
 
     def tab_settings(self) -> None:
 
@@ -997,7 +949,7 @@ class MainWindow(QMainWindow):
         # Settings table
         self.settings_table = QTableWidget()
         self.settings_table.setToolTip("Double-click a value to edit. For colors, a color picker will appear.")
-        self.settings_table.setRowCount(14)
+        self.settings_table.setRowCount(15)
         self.settings_table.setColumnCount(2)
         self.settings_table.setHorizontalHeaderLabels(["Setting", "Value"])
         v_header = self.settings_table.verticalHeader()
@@ -1017,16 +969,17 @@ class MainWindow(QMainWindow):
         self.settings_table.setItem(1, 0, QTableWidgetItem("Accent Color"))
         self.settings_table.setItem(2, 0, QTableWidgetItem("Hover Color"))
         self.settings_table.setItem(3, 0, QTableWidgetItem("Font Color"))
-        self.settings_table.setItem(4, 0, QTableWidgetItem("Maximized"))
-        self.settings_table.setItem(5, 0, QTableWidgetItem("Tx line Ending"))
-        self.settings_table.setItem(6, 0, QTableWidgetItem("Data Bits"))
-        self.settings_table.setItem(7, 0, QTableWidgetItem("Parity"))
-        self.settings_table.setItem(8, 0, QTableWidgetItem("Stop Bits"))
-        self.settings_table.setItem(9, 0, QTableWidgetItem("Flow Control"))
-        self.settings_table.setItem(10, 0, QTableWidgetItem("Open Mode"))
-        self.settings_table.setItem(11, 0, QTableWidgetItem("Reveal Hidden Char"))
-        self.settings_table.setItem(12, 0, QTableWidgetItem("Max Output Lines"))
-        self.settings_table.setItem(13, 0, QTableWidgetItem("Custom Baud Rate"))
+        self.settings_table.setItem(4, 0, QTableWidgetItem("Background Color"))
+        self.settings_table.setItem(5, 0, QTableWidgetItem("Maximized"))
+        self.settings_table.setItem(6, 0, QTableWidgetItem("Tx line Ending"))
+        self.settings_table.setItem(7, 0, QTableWidgetItem("Data Bits"))
+        self.settings_table.setItem(8, 0, QTableWidgetItem("Parity"))
+        self.settings_table.setItem(9, 0, QTableWidgetItem("Stop Bits"))
+        self.settings_table.setItem(10, 0, QTableWidgetItem("Flow Control"))
+        self.settings_table.setItem(11, 0, QTableWidgetItem("Open Mode"))
+        self.settings_table.setItem(12, 0, QTableWidgetItem("Reveal Hidden Char"))
+        self.settings_table.setItem(13, 0, QTableWidgetItem("Max Output Lines"))
+        self.settings_table.setItem(14, 0, QTableWidgetItem("Custom Baud Rate"))
 
         self.tab_settings_set()
 
@@ -1058,7 +1011,7 @@ class MainWindow(QMainWindow):
                 self.save_settings()
 
             # Color options
-            elif key in ("Accent Color", "Hover Color", "Font Color"):
+            elif key in ("Accent Color", "Hover Color", "Font Color", "Background Color"):
                 color = QColorDialog.getColor()
                 if color.isValid():
                     hex_color = color.name()
@@ -1069,6 +1022,8 @@ class MainWindow(QMainWindow):
                         general["hover_color"] = hex_color
                     elif key == "Font Color":
                         general["font_color"] = hex_color
+                    elif key == "Background Color":
+                        general["background_color"] = hex_color
                     self.save_settings()
                     self.set_style()
 
