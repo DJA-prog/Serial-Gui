@@ -1738,7 +1738,8 @@ class MainWindow(QMainWindow):
 
     def get_serial_ports(self) -> list[str]:
         ports = serial.tools.list_ports.comports()
-        # Filter out devices containing "ttyS"
+        # Filter out unwanted devices (ttyS on Linux, which are typically built-in ports that don't work well)
+        # On Windows, this filter won't match anything (COM ports don't contain "ttyS")
         return [port.device for port in ports if "ttyS" not in port.device]
 
     def print_to_display(self, message: str) -> None:
