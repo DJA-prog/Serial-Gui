@@ -1964,21 +1964,26 @@ class MainWindow(QMainWindow):
     def send_command(self) -> None:
         command = self.command_input.text().strip()
         if self.serial_port and self.serial_port.is_open:
+            # Get the current line ending key
+            tx_key = self.settings['general']['tx_line_ending']
+
+            # Find the matching value from options
+            tx_value = next(
+                value for key, value in self.OPTIONS['tx_line_ending'] 
+                if key == tx_key
+            )
+            tx_value = tx_value.encode().decode("unicode_escape")
+            
             if command:
                 self.save_command(command)  # Save command to history
-                # Get the current line ending key
-                tx_key = self.settings['general']['tx_line_ending']
-
-                # Find the matching value from options
-                tx_value = next(
-                    value for key, value in self.OPTIONS['tx_line_ending'] 
-                    if key == tx_key
-                )
-                tx_value = tx_value.encode().decode("unicode_escape")
                 self.serial_port.write((command + str(tx_value)).encode())
                 self.print_to_display(f"< {command}")
-                self.command_input.clear()
-            # If empty, do nothing (no error)
+            else:
+                # Send just the line ending when input is empty
+                self.serial_port.write(tx_value.encode())
+                self.print_to_display(f"< (blank)")
+            
+            self.command_input.clear()
 
     def send_predefined_command(self, command: str) -> None:
         self.command_input.setText(command)
