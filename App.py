@@ -16,6 +16,9 @@ from MacroEditor import MacroEditor
 from CommandsEditor import CommandsEditor
 from StyleManager import StyleManager
 
+# Application version
+__version__ = "2.1.0"
+
 # import sip
 
 from PyQt5.QtWidgets import (
@@ -343,17 +346,11 @@ class MainWindow(QMainWindow):
         self.send_button.setDisabled(True)
         self.send_button.setToolTip("Send command, or Repeat last command if input is blank")
 
-        # Add DTR and RTS checkboxes
-        self.dtr_checkbox = QCheckBox("DTR")
-        self.dtr_checkbox.setChecked(self.settings.get('general', {}).get('dtr_state', False))
-        self.rts_checkbox = QCheckBox("RTS")
-        self.rts_checkbox.setChecked(self.settings.get('general', {}).get('rts_state', False))
+        # Add Auto Reconnect checkbox
         self.auto_reconnect_checkbox = QCheckBox("Auto Reconnect")
         self.auto_reconnect_checkbox.setChecked(self.settings.get('general', {}).get('auto_reconnect', False))
         
-        # Connect state change handlers to save settings
-        self.dtr_checkbox.stateChanged.connect(lambda: self.save_checkbox_state('dtr_state', self.dtr_checkbox.isChecked()))
-        self.rts_checkbox.stateChanged.connect(lambda: self.save_checkbox_state('rts_state', self.rts_checkbox.isChecked()))
+        # Connect state change handler to save settings
         self.auto_reconnect_checkbox.stateChanged.connect(lambda: self.save_checkbox_state('auto_reconnect', self.auto_reconnect_checkbox.isChecked()))
 
         top_layout.addWidget(port_label)
@@ -363,8 +360,6 @@ class MainWindow(QMainWindow):
         top_layout.addWidget(self.connect_button)
         top_layout.addWidget(self.command_input)
         top_layout.addWidget(self.send_button)  # Add Send button to layout
-        top_layout.addWidget(self.dtr_checkbox)
-        top_layout.addWidget(self.rts_checkbox)
         top_layout.addWidget(self.auto_reconnect_checkbox)
         self.main_layout.addLayout(top_layout)
 
@@ -382,14 +377,14 @@ class MainWindow(QMainWindow):
         self.tab_input_history()  # Create the command history tab
         self.tab_macros()  # Create the macros tab
         self.tab_settings()
-        self.tab_virtual_serial()
+        self.tab_about()
 
         # Add tables to tabs
         self.tab_widget.addTab(self.commands_tab, "Commands")
         self.tab_widget.addTab(self.command_history_tab, "History")
         self.tab_widget.addTab(self.macros_tab, "Macros")
         self.tab_widget.addTab(self.settings_tab, "Settings")
-        self.tab_widget.addTab(self.virtual_serial_tab, "Virtual Serial")
+        self.tab_widget.addTab(self.about_tab, "About")
         
         # Restore last active tab
         last_tab = self.settings.get('general', {}).get('last_tab_index', 0)
@@ -910,36 +905,42 @@ class MainWindow(QMainWindow):
         # Row 4: background_color (color)
         background_color_item = QTableWidgetItem(str(settings.get("background_color", "#121212")))
         self.settings_table.setItem(4, 1, background_color_item)
-        # Row 5: maximized (bool)
+        # Row 5: DTR (bool)
+        dtr_item = QTableWidgetItem(str(settings.get("dtr_state", False)))
+        self.settings_table.setItem(5, 1, dtr_item)
+        # Row 6: RTS (bool)
+        rts_item = QTableWidgetItem(str(settings.get("rts_state", False)))
+        self.settings_table.setItem(6, 1, rts_item)
+        # Row 7: maximized (bool)
         maximized_item = QTableWidgetItem(str(settings.get("maximized", False)))
-        self.settings_table.setItem(5, 1, maximized_item)
-        # Row 6: tx line ending
+        self.settings_table.setItem(7, 1, maximized_item)
+        # Row 8: tx line ending
         tx_line_ending_item = QTableWidgetItem(str(settings.get("tx_line_ending", "CRLN")))
-        self.settings_table.setItem(6, 1, tx_line_ending_item)
-        # Row 7: Data bits: 8,7,6,5
+        self.settings_table.setItem(8, 1, tx_line_ending_item)
+        # Row 9: Data bits: 8,7,6,5
         data_bits = QTableWidgetItem(str(settings.get("data_bits", "8")))
-        self.settings_table.setItem(7, 1, data_bits)
-        # Row 8: parity: None, Even, Odd, Space, Mark
+        self.settings_table.setItem(9, 1, data_bits)
+        # Row 10: parity: None, Even, Odd, Space, Mark
         parity = QTableWidgetItem(str(settings.get("parity", "None")))
-        self.settings_table.setItem(8, 1, parity)
-        # Row 9: Stop bits: 1, 2
+        self.settings_table.setItem(10, 1, parity)
+        # Row 11: Stop bits: 1, 2
         stop_bits = QTableWidgetItem(str(settings.get("stop_bits", "1")))
-        self.settings_table.setItem(9, 1, stop_bits)
-        # Row 10: Flow Control: None, Hardware, Software
+        self.settings_table.setItem(11, 1, stop_bits)
+        # Row 12: Flow Control: None, Hardware, Software
         flow_control = QTableWidgetItem(str(settings.get("flow_control", "None")))
-        self.settings_table.setItem(10, 1, flow_control)
-        # Row 11: Open mode: Read/Write, Read only, Write only
+        self.settings_table.setItem(12, 1, flow_control)
+        # Row 13: Open mode: Read/Write, Read only, Write only
         open_mode = QTableWidgetItem(str(settings.get("open_mode", "Read/Write")))
-        self.settings_table.setItem(11, 1, open_mode)
-        # Row 12: reveal_hidden_char (bool)
+        self.settings_table.setItem(13, 1, open_mode)
+        # Row 14: reveal_hidden_char (bool)
         reveal_hidden_char_item = QTableWidgetItem(str(settings.get("reveal_hidden_char", False)))
-        self.settings_table.setItem(12, 1, reveal_hidden_char_item)
-        # Row 13: max_output_lines (int)
+        self.settings_table.setItem(14, 1, reveal_hidden_char_item)
+        # Row 15: max_output_lines (int)
         max_output_lines_item = QTableWidgetItem(str(settings.get("max_output_lines", 10000)))
-        self.settings_table.setItem(13, 1, max_output_lines_item)
-        # Row 14: custom-baudrate (int)
+        self.settings_table.setItem(15, 1, max_output_lines_item)
+        # Row 16: custom-baudrate (int)
         custom_baud_rate_item = QTableWidgetItem(str(settings.get("custom-baudrate", 115200)))
-        self.settings_table.setItem(14, 1, custom_baud_rate_item)
+        self.settings_table.setItem(16, 1, custom_baud_rate_item)
 
     def tab_settings(self) -> None:
 
@@ -949,7 +950,7 @@ class MainWindow(QMainWindow):
         # Settings table
         self.settings_table = QTableWidget()
         self.settings_table.setToolTip("Double-click a value to edit. For colors, a color picker will appear.")
-        self.settings_table.setRowCount(15)
+        self.settings_table.setRowCount(17)
         self.settings_table.setColumnCount(2)
         self.settings_table.setHorizontalHeaderLabels(["Setting", "Value"])
         v_header = self.settings_table.verticalHeader()
@@ -970,16 +971,18 @@ class MainWindow(QMainWindow):
         self.settings_table.setItem(2, 0, QTableWidgetItem("Hover Color"))
         self.settings_table.setItem(3, 0, QTableWidgetItem("Font Color"))
         self.settings_table.setItem(4, 0, QTableWidgetItem("Background Color"))
-        self.settings_table.setItem(5, 0, QTableWidgetItem("Maximized"))
-        self.settings_table.setItem(6, 0, QTableWidgetItem("Tx line Ending"))
-        self.settings_table.setItem(7, 0, QTableWidgetItem("Data Bits"))
-        self.settings_table.setItem(8, 0, QTableWidgetItem("Parity"))
-        self.settings_table.setItem(9, 0, QTableWidgetItem("Stop Bits"))
-        self.settings_table.setItem(10, 0, QTableWidgetItem("Flow Control"))
-        self.settings_table.setItem(11, 0, QTableWidgetItem("Open Mode"))
-        self.settings_table.setItem(12, 0, QTableWidgetItem("Reveal Hidden Char"))
-        self.settings_table.setItem(13, 0, QTableWidgetItem("Max Output Lines"))
-        self.settings_table.setItem(14, 0, QTableWidgetItem("Custom Baud Rate"))
+        self.settings_table.setItem(5, 0, QTableWidgetItem("DTR"))
+        self.settings_table.setItem(6, 0, QTableWidgetItem("RTS"))
+        self.settings_table.setItem(7, 0, QTableWidgetItem("Maximized"))
+        self.settings_table.setItem(8, 0, QTableWidgetItem("Tx line Ending"))
+        self.settings_table.setItem(9, 0, QTableWidgetItem("Data Bits"))
+        self.settings_table.setItem(10, 0, QTableWidgetItem("Parity"))
+        self.settings_table.setItem(11, 0, QTableWidgetItem("Stop Bits"))
+        self.settings_table.setItem(12, 0, QTableWidgetItem("Flow Control"))
+        self.settings_table.setItem(13, 0, QTableWidgetItem("Open Mode"))
+        self.settings_table.setItem(14, 0, QTableWidgetItem("Reveal Hidden Char"))
+        self.settings_table.setItem(15, 0, QTableWidgetItem("Max Output Lines"))
+        self.settings_table.setItem(16, 0, QTableWidgetItem("Custom Baud Rate"))
 
         self.tab_settings_set()
 
@@ -994,7 +997,7 @@ class MainWindow(QMainWindow):
             general = self.settings["general"]
 
             # Boolean options
-            if key in ("Auto Clear Output", "Maximized", "Reveal Hidden Char"):
+            if key in ("Auto Clear Output", "Maximized", "Reveal Hidden Char", "DTR", "RTS"):
                 value_item = self.settings_table.item(row, 1)
                 if value_item is None:
                     return
@@ -1008,6 +1011,16 @@ class MainWindow(QMainWindow):
                     general["maximized"] = new_value
                 elif key == "Reveal Hidden Char":
                     general["reveal_hidden_char"] = new_value
+                elif key == "DTR":
+                    general["dtr_state"] = new_value
+                    # Update serial port if connected
+                    if self.serial_port and self.serial_port.is_open:
+                        self.serial_port.dtr = new_value
+                elif key == "RTS":
+                    general["rts_state"] = new_value
+                    # Update serial port if connected
+                    if self.serial_port and self.serial_port.is_open:
+                        self.serial_port.rts = new_value
                 self.save_settings()
 
             # Color options
@@ -1177,103 +1190,49 @@ class MainWindow(QMainWindow):
 
         reset_button.clicked.connect(reset_to_defaults)
 
-    def tab_virtual_serial(self) -> None:
-        self.virtual_serial_tab: QWidget = QWidget()
-        self.virtual_serial_layout: QVBoxLayout = QVBoxLayout(self.virtual_serial_tab)
-
-        self.virtual_serial_table = QTableWidget()
-        self.virtual_serial_table.setRowCount(0)
-        self.virtual_serial_table.setColumnCount(2)
-        self.virtual_serial_table.setHorizontalHeaderLabels(["Virtual Serial Path", "Baud Rate"])
-        v_header = self.virtual_serial_table.verticalHeader()
-        if v_header:
-            v_header.setVisible(False)
-        self.virtual_serial_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.virtual_serial_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.virtual_serial_table.setColumnWidth(0, int(self.left_panel_width * 0.45))
-        self.virtual_serial_table.setColumnWidth(1, int(self.left_panel_width * 0.50))
-
-        self.virtual_serial_layout.addWidget(self.virtual_serial_table)
-
-        # Load saved virtual serials from YAML
-        yaml_path = os.path.join(self.app_configs_path, "virtual_serials.yaml")
-        if os.path.exists(yaml_path):
-            try:
-                with open(yaml_path, "r") as f:
-                    entries = yaml.safe_load(f)
-                if isinstance(entries, list):
-                    for entry in entries:
-                        path = entry.get("path", "")
-                        baud_rate = entry.get("baud_rate", "")
-                        row = self.virtual_serial_table.rowCount()
-                        self.virtual_serial_table.insertRow(row)
-                        self.virtual_serial_table.setItem(row, 0, QTableWidgetItem(str(path)))
-                        self.virtual_serial_table.setItem(row, 1, QTableWidgetItem(str(baud_rate)))
-            except Exception as e:
-                QMessageBox.critical(self, "Load Error", f"Failed to load virtual serials: {e}")
-
-       
-        # Add a clear all button
-        add_virtual_serial_button = QPushButton("Add Virtual Serial")
-        add_virtual_serial_button.setToolTip("Add a new virtual_serial entry")
-        add_virtual_serial_button.clicked.connect(self.add_virtual_serial)
-        self.virtual_serial_layout.addWidget(add_virtual_serial_button)
-
-        clear_button = QPushButton("Clear All Virtual Serials")
-        clear_button.setToolTip("Remove all virtual_serial entries")
-        clear_button.clicked.connect(self.clear_virtual_serials)
-        self.virtual_serial_layout.addWidget(clear_button)
-
-
-    def add_virtual_serial(self) -> None:
-        path, ok = QInputDialog.getText(self, "Add Virtual Serial", "Enter virtual serial path (e.g., /dev/pts/3 or COM5):")
-        if not ok or not path:
-            return
-
-        baud_rate, ok = QInputDialog.getText(self, "Add Virtual Serial", "Enter baud rate (e.g., 115200):")
-        if not ok or not baud_rate:
-            return
-
-        baud_rate = abs(int(baud_rate))
-
-        # Update table
-        self.virtual_serial_table.insertRow(self.virtual_serial_table.rowCount())
-        self.virtual_serial_table.setItem(self.virtual_serial_table.rowCount() - 1, 0, QTableWidgetItem(path))
-        self.virtual_serial_table.setItem(self.virtual_serial_table.rowCount() - 1, 1, QTableWidgetItem(str(baud_rate)))
-
-        # Save to YAML file
-        yaml_path = os.path.join(self.app_configs_path, "virtual_serials.yaml")
-        entries = []
-        # Read existing entries from table
-        for row in range(self.virtual_serial_table.rowCount()):
-            path_item = self.virtual_serial_table.item(row, 0)
-            baud_item = self.virtual_serial_table.item(row, 1)
-            if path_item and baud_item:
-                entry_path = path_item.text()
-                entry_baud = int(baud_item.text())
-                entries.append({'path': entry_path, 'baud_rate': entry_baud})
-        try:
-            with open(yaml_path, "w") as f:
-                yaml.dump(entries, f, default_flow_style=False)
-        except Exception as e:
-            QMessageBox.critical(self, "Save Error", f"Failed to save virtual serials: {e}")
-
-    def clear_virtual_serials(self) -> None:
-        reply = QMessageBox.question(
-            self,
-            "Clear All Virtual Serials",
-            "Are you sure you want to clear all virtual serial entries? This cannot be undone.",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+    def tab_about(self) -> None:
+        """Create the About tab with application information"""
+        self.about_tab: QWidget = QWidget()
+        about_layout: QVBoxLayout = QVBoxLayout(self.about_tab)
+        about_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        
+        # Application title
+        title_label = QLabel("Serial Communication Monitor")
+        title_font = title_label.font()
+        title_font.setPointSize(16)
+        title_font.setBold(True)
+        title_label.setFont(title_font)
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        about_layout.addWidget(title_label)
+        
+        about_layout.addSpacing(20)
+        
+        # Version info
+        version_label = QLabel(f"Version: {__version__}")
+        version_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        about_layout.addWidget(version_label)
+        
+        about_layout.addSpacing(10)
+        
+        # Description
+        description = QLabel(
+            "A powerful serial communication tool for monitoring and debugging "
+            "serial devices. Features include command history, macros, and "
+            "customizable settings."
         )
-        if reply == QMessageBox.Yes:
-            self.virtual_serial_table.setRowCount(0)
-            yaml_path = os.path.join(self.app_configs_path, "virtual_serials.yaml")
-            try:
-                with open(yaml_path, "w") as f:
-                    yaml.dump([], f, default_flow_style=False)
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Failed to clear virtual serials file: {e}")
+        description.setWordWrap(True)
+        description.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        about_layout.addWidget(description)
+        
+        about_layout.addSpacing(20)
+        
+        # GitHub link (if applicable)
+        github_label = QLabel('<a href="https://github.com/DJA-prog/Serial-Gui">GitHub Repository</a>')
+        github_label.setOpenExternalLinks(True)
+        github_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        about_layout.addWidget(github_label)
+        
+        about_layout.addStretch()
 
     def open_configurations_directory(self, config_path: Path) -> None:
         """Opens the configuration directory in the system's file manager."""
@@ -1897,9 +1856,9 @@ class MainWindow(QMainWindow):
             # Apply additional serial settings
             self.apply_serial_settings()
 
-            # Set DTR/RTS
-            self.serial_port.dtr = self.dtr_checkbox.isChecked()
-            self.serial_port.rts = self.rts_checkbox.isChecked()
+            # Set DTR/RTS from settings
+            self.serial_port.dtr = self.settings.get('general', {}).get('dtr_state', False)
+            self.serial_port.rts = self.settings.get('general', {}).get('rts_state', False)
 
             # Start the serial reader thread
             self.serial_reader_thread = SerialReaderThread(self.serial_port)
