@@ -10,6 +10,7 @@ from datetime import datetime
 import time
 import threading
 from typing import Optional, Dict, Any
+from queue import Queue
 
 from MacroEditor import MacroEditor
 
@@ -20,7 +21,7 @@ from PyQt5.QtWidgets import (
     QTextEdit, QLineEdit, QLabel, QComboBox, QMessageBox, QTableWidget, QTableWidgetItem, QInputDialog, QDialog, QListWidget, QCheckBox,
     QSpinBox, QTabWidget, QFileDialog, QMenu, QAction, QScrollArea
 )
-from PyQt5.QtCore import QTimer, Qt, QPoint, pyqtSignal, pyqtSlot
+from PyQt5.QtCore import QTimer, Qt, QPoint, pyqtSignal, pyqtSlot, QThread
 from PyQt5.QtGui import QMouseEvent, QCloseEvent, QKeyEvent
 from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QColorDialog, QAbstractItemView
 
@@ -42,6 +43,66 @@ def get_config_dir(app_name: str) -> Path:
     config_dir.mkdir(parents=True, exist_ok=True)
 
     return config_dir
+
+class SerialReaderThread(QThread):
+    """Thread for reading serial data to prevent UI blocking"""
+    data_received = pyqtSignal(str)  # Signal to send data back to main thread
+    error_occurred = pyqtSignal(str)  # Signal for error handling
+    
+    def __init__(self, serial_port: serial.Serial) -> None:
+        super().__init__()
+        self.serial_port = serial_port
+        self.running = True
+        self.buffer = ""  # Buffer to accumulate partial lines
+        
+    def run(self) -> None:
+        """Main thread loop for reading serial data"""
+        while self.running and self.serial_port and self.serial_port.is_open:
+            try:
+                if self.serial_port.in_waiting > 0:
+                    # Read available data in chunks
+                    chunk_size = min(self.serial_port.in_waiting, 4096)  # Read up to 4KB at a time
+                    data = self.serial_port.read(chunk_size)
+                    
+                    # Decode with error handling
+                    decoded = data.decode('utf-8', errors='replace')
+                    
+                    # Add to buffer
+                    self.buffer += decoded
+                    
+                    # Process complete lines (lines ending with \n or \r\n)
+                    while '\n' in self.buffer or '\r' in self.buffer:
+                        # Find the first line ending
+                        newline_pos = len(self.buffer)
+                        line_ending = '\n'  # Default line ending
+                        for delim in ['\r\n', '\n', '\r']:
+                            pos = self.buffer.find(delim)
+                            if pos != -1 and pos < newline_pos:
+                                newline_pos = pos
+                                line_ending = delim
+                        
+                        if newline_pos < len(self.buffer):
+                            # Extract the complete line
+                            line = self.buffer[:newline_pos]
+                            # Remove the line and its ending from buffer
+                            self.buffer = self.buffer[newline_pos + len(line_ending):]
+                            
+                            # Emit the line (preserve the line ending for display)
+                            if line or line_ending:  # Emit if there's content or just a line ending
+                                self.data_received.emit(line + line_ending.replace('\r\n', '\n').replace('\r', '\n'))
+                        else:
+                            break
+                else:
+                    # Small sleep to prevent CPU spinning
+                    time.sleep(0.01)
+            except Exception as e:
+                self.error_occurred.emit(str(e))
+                break
+    
+    def stop(self) -> None:
+        """Stop the thread gracefully"""
+        self.running = False
+        self.wait()  # Wait for thread to finish
 
 class HistoryLineEdit(QLineEdit):
     def __init__(self, parent=None) -> None:
@@ -194,6 +255,7 @@ class MainWindow(QMainWindow):
 
         # Serial connection
         self.serial_port = None
+        self.serial_reader_thread: Optional[SerialReaderThread] = None
         self.available_ports = self.get_serial_ports()
 
         # Timer for refreshing serial ports
@@ -226,10 +288,6 @@ class MainWindow(QMainWindow):
         central_widget = QWidget()
         central_widget.setLayout(self.main_layout)
         self.setCentralWidget(central_widget)
-
-        # Timer for reading serial data
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.read_serial_data)
         
         # Connect macro signals for thread-safe GUI updates
         self.macro_print_signal.connect(self.print_to_display)
@@ -1888,8 +1946,13 @@ class MainWindow(QMainWindow):
             self.serial_port.dtr = self.dtr_checkbox.isChecked()
             self.serial_port.rts = self.rts_checkbox.isChecked()
 
-            # Timers and UI
-            self.timer.start(100)
+            # Start the serial reader thread
+            self.serial_reader_thread = SerialReaderThread(self.serial_port)
+            self.serial_reader_thread.data_received.connect(self.handle_serial_data)
+            self.serial_reader_thread.error_occurred.connect(self.handle_serial_error)
+            self.serial_reader_thread.start()
+
+            # Stop refreshing ports when connected
             self.refresh_timer.stop()
             self.connect_button.setText("Disconnect")
             self.update_serial_status("green", "Connected")
@@ -1911,8 +1974,12 @@ class MainWindow(QMainWindow):
 
     def disconnect_serial(self) -> None:
         if self.serial_port:
+            # Stop the serial reader thread first
+            if self.serial_reader_thread:
+                self.serial_reader_thread.stop()
+                self.serial_reader_thread = None
+            
             # Stop timers
-            self.timer.stop()
             self.connected_time_timer.stop()
 
             # Close the serial port
@@ -1997,20 +2064,14 @@ class MainWindow(QMainWindow):
         self.command_input.setText(command)
         self.send_command()
 
-    def read_serial_data(self) -> None:
-        if self.serial_port and self.serial_port.is_open:
-            try:
-                while self.serial_port.in_waiting > 0:
-                    # Decode with error handling
-                    response = self.serial_port.readline().decode('utf-8', errors='replace')
-
-                    if response:
-                        self.print_to_display('> ' + response)
-
-
-            except Exception as e:
-                QMessageBox.critical(self, "Read Error", str(e))
-                self.disconnect_serial()
+    def handle_serial_data(self, data: str) -> None:
+        """Handle data received from the serial reader thread"""
+        self.print_to_display('> ' + data)
+    
+    def handle_serial_error(self, error: str) -> None:
+        """Handle errors from the serial reader thread"""
+        QMessageBox.critical(self, "Read Error", error)
+        self.disconnect_serial()
 
     def update_serial_status(self, color: str, status_text: str) -> None:
         self.serial_status_light.setStyleSheet(f"background-color: {color}; border: 1px solid black; border-radius: 5px;")
