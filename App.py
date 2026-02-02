@@ -313,6 +313,26 @@ class MainWindow(QMainWindow):
         self.style_manager.update_settings(self.settings['general'])
         style = self.style_manager.get_main_window_stylesheet()
         self.setStyleSheet(style)
+    
+    def set_tooltip(self, widget: QWidget, text: str) -> None:
+        """Set tooltip on widget if tooltips are enabled"""
+        if self.settings.get('general', {}).get('enable_tooltips', True):
+            widget.setToolTip(text)
+        else:
+            widget.setToolTip("")
+    
+    def update_tooltips_visibility(self) -> None:
+        """Update all tooltips based on current setting"""
+        enabled = self.settings.get('general', {}).get('enable_tooltips', True)
+        
+        # Update all widgets with tooltips
+        for widget in self.findChildren(QWidget):
+            if widget.toolTip():
+                if not enabled:
+                    widget.setProperty("_original_tooltip", widget.toolTip())
+                    widget.setToolTip("")
+            elif enabled and widget.property("_original_tooltip"):
+                widget.setToolTip(widget.property("_original_tooltip"))
 
     def create_top_ribbon(self) -> None:
         """
@@ -326,20 +346,24 @@ class MainWindow(QMainWindow):
         self.port_combo = QComboBox()
         self.port_combo.addItems(self.available_ports)
         self.port_combo.setFixedWidth(150)  # Set fixed width for the port dropdown
+        self.port_combo.setToolTip("Select the serial port to connect to")
 
         baud_rate_label = QLabel("Baud Rate:")
         self.baud_rate_combo = QComboBox()
         self.baud_rate_combo.addItems(["9600", "19200", "38400", "57600", "115200", "230400", "460800", "921600", "Custom"])
         self.baud_rate_combo.setCurrentText(str(self.settings.get("general", {}).get("last-baudrate", 115200)))  # Default baud rate
         self.baud_rate_combo.setFixedWidth(100)  # Set fixed width for the baud rate dropdown
+        self.baud_rate_combo.setToolTip("Select the baud rate for serial communication")
 
         self.connect_button = QPushButton("Connect")
         self.connect_button.clicked.connect(self.toggle_connection)
+        self.connect_button.setToolTip("Connect to or disconnect from the selected serial port")
 
         self.command_input = HistoryLineEdit(self)
-        self.command_input.setPlaceholderText("Enter AT command...")
+        self.command_input.setPlaceholderText("Enter command here...")
         self.command_input.returnPressed.connect(self.send_command)
-        self.command_input.setFixedHeight(self.command_input.sizeHint().height() + 2) 
+        self.command_input.setFixedHeight(self.command_input.sizeHint().height() + 2)
+        self.command_input.setToolTip("Enter a command to send. Press Enter to send, or double-Enter to repeat last command")
 
         self.send_button = QPushButton("Send")  # Add Send button
         self.send_button.clicked.connect(self.send_command)  # Connect to send_command method
@@ -349,6 +373,7 @@ class MainWindow(QMainWindow):
         # Add Auto Reconnect checkbox
         self.auto_reconnect_checkbox = QCheckBox("Auto Reconnect")
         self.auto_reconnect_checkbox.setChecked(self.settings.get('general', {}).get('auto_reconnect', False))
+        self.auto_reconnect_checkbox.setToolTip("Automatically reconnect if the serial connection is lost")
         
         # Connect state change handler to save settings
         self.auto_reconnect_checkbox.stateChanged.connect(lambda: self.save_checkbox_state('auto_reconnect', self.auto_reconnect_checkbox.isChecked()))
@@ -428,6 +453,7 @@ class MainWindow(QMainWindow):
 
         # --- YAML file dropdown ---
         self.yaml_dropdown = QComboBox()
+        self.yaml_dropdown.setToolTip("Select a command set to load predefined commands")
         self.commands_layout.addWidget(QLabel("Select Command Set:"))
         self.commands_layout.addWidget(self.yaml_dropdown)
 
@@ -441,12 +467,20 @@ class MainWindow(QMainWindow):
         yaml_files.sort()
         self.yaml_dropdown.addItems(yaml_files)
 
+        # Restore last selected command list
+        last_command_list = self.settings.get('general', {}).get('last_command_list', '')
+        if last_command_list and last_command_list in yaml_files:
+            self.yaml_dropdown.setCurrentText(last_command_list)
+
         selected_file = self.yaml_dropdown.currentText()
 
         # --- Command lists ---
         self.no_input_list = QListWidget()
+        self.no_input_list.setToolTip("Click to send a command that doesn't require additional input")
         self.input_required_list = QListWidget()
+        self.input_required_list.setToolTip("Click to insert a command template into the input field")
         self.flat_command_list = QListWidget()  # For flat (non-sectioned) YAMLs
+        self.flat_command_list.setToolTip("Click to send a command")
 
         self.no_input_label = QLabel("Commands (No Input Required):")
         self.input_required_label = QLabel("Commands (Require Input):")
@@ -523,8 +557,14 @@ class MainWindow(QMainWindow):
         # Initial load
         populate_command_lists(selected_file)
 
-        # Reload on change
-        self.yaml_dropdown.currentTextChanged.connect(populate_command_lists)
+        # Reload on change and save selection
+        def on_command_list_changed(filename: str) -> None:
+            populate_command_lists(filename)
+            # Save the selected command list
+            self.settings['general']['last_command_list'] = filename
+            self.save_settings()
+        
+        self.yaml_dropdown.currentTextChanged.connect(on_command_list_changed)
         
         # --- Bottom buttons ---
         bottom_buttons_layout = QHBoxLayout()
@@ -946,6 +986,9 @@ class MainWindow(QMainWindow):
         # Row 16: custom-baudrate (int)
         custom_baud_rate_item = QTableWidgetItem(str(settings.get("custom-baudrate", 115200)))
         self.settings_table.setItem(16, 1, custom_baud_rate_item)
+        # Row 17: enable_tooltips (bool)
+        enable_tooltips_item = QTableWidgetItem(str(settings.get("enable_tooltips", True)))
+        self.settings_table.setItem(17, 1, enable_tooltips_item)
 
     def tab_settings(self) -> None:
 
@@ -955,7 +998,7 @@ class MainWindow(QMainWindow):
         # Settings table
         self.settings_table = QTableWidget()
         self.settings_table.setToolTip("Double-click a value to edit. For colors, a color picker will appear.")
-        self.settings_table.setRowCount(17)
+        self.settings_table.setRowCount(18)
         self.settings_table.setColumnCount(2)
         self.settings_table.setHorizontalHeaderLabels(["Setting", "Value"])
         v_header = self.settings_table.verticalHeader()
@@ -988,6 +1031,7 @@ class MainWindow(QMainWindow):
         self.settings_table.setItem(14, 0, QTableWidgetItem("Reveal Hidden Char"))
         self.settings_table.setItem(15, 0, QTableWidgetItem("Max Output Lines"))
         self.settings_table.setItem(16, 0, QTableWidgetItem("Custom Baud Rate"))
+        self.settings_table.setItem(17, 0, QTableWidgetItem("Enable Tooltips"))
 
         self.tab_settings_set()
 
@@ -1002,7 +1046,7 @@ class MainWindow(QMainWindow):
             general = self.settings["general"]
 
             # Boolean options
-            if key in ("Auto Clear Output", "Maximized", "Reveal Hidden Char", "DTR", "RTS"):
+            if key in ("Auto Clear Output", "Maximized", "Reveal Hidden Char", "DTR", "RTS", "Enable Tooltips"):
                 value_item = self.settings_table.item(row, 1)
                 if value_item is None:
                     return
@@ -1023,6 +1067,12 @@ class MainWindow(QMainWindow):
                         self.serial_port.dtr = new_value
                 elif key == "RTS":
                     general["rts_state"] = new_value
+                    # Update serial port if connected
+                    if self.serial_port and self.serial_port.is_open:
+                        self.serial_port.rts = new_value
+                elif key == "Enable Tooltips":
+                    general["enable_tooltips"] = new_value
+                    self.update_tooltips_visibility()
                     # Update serial port if connected
                     if self.serial_port and self.serial_port.is_open:
                         self.serial_port.rts = new_value
@@ -1304,6 +1354,7 @@ class MainWindow(QMainWindow):
         # Right layout: Response display
         self.response_display = QTextEdit()
         self.response_display.setReadOnly(True)
+        self.response_display.setToolTip("Serial communication output display. Right-click for options.")
         max_lines = self.settings.get('general', {}).get('max_output_lines', 10000)
         doc = self.response_display.document()
         if doc:
@@ -1347,6 +1398,7 @@ class MainWindow(QMainWindow):
 
         self.clear_button = QPushButton("Clear output")
         self.clear_button.clicked.connect(self.clear_output)
+        self.clear_button.setToolTip("Clear all text from the output display")
 
         predefined_layout.addWidget(self.save_output_button)
         predefined_layout.addWidget(self.clear_button)
