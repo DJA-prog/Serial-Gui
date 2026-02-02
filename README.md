@@ -4,6 +4,12 @@ A modern, cross-platform serial monitor application built with PyQt5. This tool 
 
 ![Preview](images/V2.2.0_preview.png)
 
+## Tested Platforms
+
+- ✅ **Windows 10**
+- ✅ **Debian 13** (Trixie)
+- Should work on macOS and other Linux distributions
+
 ## Features
 
 ### Core Functionality
