@@ -547,12 +547,17 @@ class MainWindow(QMainWindow):
         self.command_history_layout = QVBoxLayout(self.command_history_tab)
 
         self.command_history_list = QListWidget()
-        self.command_history_list.setToolTip("Click to insert command into input field")
+        self.command_history_list.setToolTip("Single-click to insert command into input field. Double-click to send immediately.")
         self.update_tab_input_history()
 
         # Click to insert command into input field
         self.command_history_list.itemClicked.connect(
             lambda item: self.command_input.setText(item.text())
+        )
+        
+        # Double-click to send command immediately
+        self.command_history_list.itemDoubleClicked.connect(
+            lambda item: self.send_history_command(item.text())
         )
 
         self.command_history_layout.addWidget(QLabel("Command History:"))
@@ -1279,6 +1284,17 @@ class MainWindow(QMainWindow):
                 self.command_history_list.clear()
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to clear history: {e}")
+
+    def send_history_command(self, command: str) -> None:
+        """Send a command from history immediately"""
+        if not self.serial_port or not self.serial_port.is_open:
+            QMessageBox.warning(self, "Not Connected", "Please connect to a serial port first.")
+            return
+        
+        # Set the command in the input field
+        self.command_input.setText(command)
+        # Trigger the send
+        self.send_command()
 
     def create_right_panel(self) -> None:
         """
