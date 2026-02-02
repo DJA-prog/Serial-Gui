@@ -1172,7 +1172,9 @@ class MainWindow(QMainWindow):
         self.virtual_serial_table.setRowCount(0)
         self.virtual_serial_table.setColumnCount(2)
         self.virtual_serial_table.setHorizontalHeaderLabels(["Virtual Serial Path", "Baud Rate"])
-        self.virtual_serial_table.verticalHeader().setVisible(False)
+        v_header = self.virtual_serial_table.verticalHeader()
+        if v_header:
+            v_header.setVisible(False)
         self.virtual_serial_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.virtual_serial_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.virtual_serial_table.setColumnWidth(0, int(self.left_panel_width * 0.45))
@@ -1231,9 +1233,12 @@ class MainWindow(QMainWindow):
         entries = []
         # Read existing entries from table
         for row in range(self.virtual_serial_table.rowCount()):
-            entry_path = self.virtual_serial_table.item(row, 0).text()
-            entry_baud = int(self.virtual_serial_table.item(row, 1).text())
-            entries.append({'path': entry_path, 'baud_rate': entry_baud})
+            path_item = self.virtual_serial_table.item(row, 0)
+            baud_item = self.virtual_serial_table.item(row, 1)
+            if path_item and baud_item:
+                entry_path = path_item.text()
+                entry_baud = int(baud_item.text())
+                entries.append({'path': entry_path, 'baud_rate': entry_baud})
         try:
             with open(yaml_path, "w") as f:
                 yaml.dump(entries, f, default_flow_style=False)
@@ -1709,16 +1714,19 @@ class MainWindow(QMainWindow):
             timestamp_prefix = f"[{timestamp}] "
         
         # Extract flow indicator (< or >) if present
+        has_flow_indicator = False
         if original_message.startswith("< "):
             flow_indicator = "< "
             original_message = original_message[2:]
+            has_flow_indicator = True
         elif original_message.startswith("> "):
             flow_indicator = "> "
             original_message = original_message[2:]
+            has_flow_indicator = True
         
-        # Convert to hex if enabled
+        # Convert to hex if enabled - but ONLY for actual serial data (messages with flow indicators)
         display_format = self.settings.get("general", {}).get("display_format", "text")
-        if display_format == "hex":
+        if display_format == "hex" and has_flow_indicator:
             # Convert only the message content to hex
             try:
                 hex_representation = ' '.join(f'{ord(c):02X}' for c in original_message.strip())
@@ -1727,8 +1735,8 @@ class MainWindow(QMainWindow):
                 # If conversion fails, keep original with timestamp and flow indicator
                 message = f"{timestamp_prefix}{flow_indicator}{original_message}"
         else:
-            # Text mode - apply reveal hidden characters if enabled
-            if self.settings.get("general", {}).get("reveal_hidden_char", False):
+            # Text mode - apply reveal hidden characters if enabled (only for serial data)
+            if self.settings.get("general", {}).get("reveal_hidden_char", False) and has_flow_indicator:
                 original_message = self.reveal_hidden_characters(flow_indicator + original_message)
                 # Remove flow indicator as it was added back by reveal_hidden_characters
                 if original_message.startswith(flow_indicator):
@@ -1981,7 +1989,7 @@ class MainWindow(QMainWindow):
             else:
                 # Send just the line ending when input is empty
                 self.serial_port.write(tx_value.encode())
-                self.print_to_display(f"< (blank)")
+                # self.print_to_display(f"< (blank)")
             
             self.command_input.clear()
 
