@@ -9,7 +9,7 @@ import yaml
 from datetime import datetime
 import time
 import threading
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from queue import Queue
 
 from MacroEditor import MacroEditor
@@ -17,7 +17,7 @@ from CommandsEditor import CommandsEditor
 from StyleManager import StyleManager
 
 # Application version
-__version__ = "2.1.0"
+__version__ = "2.1.1"
 
 # import sip
 
@@ -172,6 +172,7 @@ class MainWindow(QMainWindow):
     macro_send_command_signal = pyqtSignal()
     macro_status_signal = pyqtSignal(str)
     macro_dialog_signal = pyqtSignal(str, object)  # (message, result_queue)
+    macro_input_dialog_signal = pyqtSignal(str, object)  # (prompt, result_queue)
     
     # Hard-coded options that should not be saved to settings.yaml
     OPTIONS = {
@@ -270,6 +271,11 @@ class MainWindow(QMainWindow):
         self.serial_port = None
         self.serial_reader_thread: Optional[SerialReaderThread] = None
         self.available_ports = self.get_serial_ports()
+        
+        # Macro session buffer - only active during macro execution
+        self.macro_session_active = False
+        self.macro_session_buffer: List[str] = []  # Dedicated buffer for macro OutputBlock checking
+        self.macro_session_lock = threading.Lock()
 
         # Timer for refreshing serial ports
         self.refresh_timer = QTimer()
@@ -308,6 +314,7 @@ class MainWindow(QMainWindow):
         self.macro_send_command_signal.connect(self.send_command)
         self.macro_status_signal.connect(self.macro_status_label.setText)
         self.macro_dialog_signal.connect(self._show_macro_dialog)
+        self.macro_input_dialog_signal.connect(self._show_macro_input_dialog)
 
     def set_style(self) -> None:
         """Apply stylesheet using StyleManager"""
@@ -860,8 +867,26 @@ class MainWindow(QMainWindow):
         # Put result in queue (True for Continue, False for End)
         result_queue.put(reply == QMessageBox.Ok)
     
+    def _show_macro_input_dialog(self, prompt: str, result_queue: Queue) -> None:
+        """Show an input dialog to get custom command from user (called in main thread)"""
+        text, ok = QInputDialog.getText(
+            self,
+            "Custom Command",
+            prompt,
+            QLineEdit.Normal,
+            ""
+        )
+        
+        # Put result in queue (command string if ok, None if cancelled)
+        result_queue.put(text if ok else None)
+    
     def _execute_macro_steps(self, macro_name: str, steps: list) -> None:
         """Execute macro steps in sequence"""
+        # Initialize macro session buffer
+        with self.macro_session_lock:
+            self.macro_session_active = True
+            self.macro_session_buffer.clear()
+        
         self._update_macro_status_threadsafe(f"Macro: Running '{macro_name}'")
         self._print_to_display_threadsafe(f"══════════════════════════════════════")
         self._print_to_display_threadsafe(f"  Executing Macro: {macro_name}")
@@ -870,6 +895,11 @@ class MainWindow(QMainWindow):
         for i, step in enumerate(steps, 1):
             try:
                 if 'input' in step:
+                    # Clear session buffer before sending command
+                    # This ensures OutputBlock only sees responses to this command
+                    with self.macro_session_lock:
+                        self.macro_session_buffer.clear()
+                    
                     # Send command
                     command = step['input']
                     self._print_to_display_threadsafe(f"Step {i}: Send command '{command}'")
@@ -879,12 +909,20 @@ class MainWindow(QMainWindow):
                     time.sleep(0.1)  # Small delay for command to be sent
                     
                 elif 'delay' in step:
+                    # Clear session buffer before delay
+                    with self.macro_session_lock:
+                        self.macro_session_buffer.clear()
+                    
                     # Wait for specified time
                     delay_ms = step['delay']
                     self._print_to_display_threadsafe(f"Step {i}: Delay {delay_ms}ms")
                     time.sleep(delay_ms / 1000.0)
                     
                 elif 'dialog_wait' in step:
+                    # Clear session buffer before dialog
+                    with self.macro_session_lock:
+                        self.macro_session_buffer.clear()
+                    
                     # Show dialog and wait for user response
                     dialog_config = step['dialog_wait']
                     message = dialog_config.get('message', 'Continue macro execution?')
@@ -906,6 +944,10 @@ class MainWindow(QMainWindow):
                         self._print_to_display_threadsafe(f"Macro ENDED by user")
                         self._print_to_display_threadsafe(f"══════════════════════════════════════")
                         self._update_macro_status_threadsafe("Macro: Idle")
+                        # Deactivate macro session
+                        with self.macro_session_lock:
+                            self.macro_session_active = False
+                            self.macro_session_buffer.clear()
                         return
                     else:
                         self._print_to_display_threadsafe(f"Step {i}: User continued macro")
@@ -931,7 +973,28 @@ class MainWindow(QMainWindow):
                             self._print_to_display_threadsafe(f"Macro EXITED (fail condition)")
                             self._print_to_display_threadsafe(f"══════════════════════════════════════")
                             self._update_macro_status_threadsafe("Macro: Idle")
+                            # Deactivate macro session
+                            with self.macro_session_lock:
+                                self.macro_session_active = False
+                                self.macro_session_buffer.clear()
                             return
+                        elif fail_action == "DIALOG":
+                            # Show dialog to get custom command from user
+                            self._print_to_display_threadsafe(f"Step {i}: Requesting custom command from user")
+                            input_queue: Queue[Optional[str]] = Queue()
+                            self.macro_input_dialog_signal.emit("Expected output not received. Enter recovery command:", input_queue)
+                            
+                            # Wait for user input
+                            user_command = input_queue.get()
+                            
+                            if user_command:
+                                self._print_to_display_threadsafe(f"Step {i}: User provided command '{user_command}'")
+                                self._set_command_input_threadsafe(user_command)
+                                time.sleep(0.05)
+                                self._send_command_threadsafe()
+                                time.sleep(0.1)
+                            else:
+                                self._print_to_display_threadsafe(f"Step {i}: User cancelled - continuing without action")
                         elif isinstance(fail_action, dict) and 'input' in fail_action:
                             # Send fail command
                             fail_cmd = fail_action['input']
@@ -946,29 +1009,42 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 self._print_to_display_threadsafe(f"Step {i}: ✗ ERROR - {e}")
                 self._update_macro_status_threadsafe("Macro: Idle")
+                # Deactivate macro session
+                with self.macro_session_lock:
+                    self.macro_session_active = False
+                    self.macro_session_buffer.clear()
                 return
         
         self._print_to_display_threadsafe(f"══════════════════════════════════════")
         self._print_to_display_threadsafe(f"Macro '{macro_name}' COMPLETED")
         self._print_to_display_threadsafe(f"══════════════════════════════════════")
         self._update_macro_status_threadsafe("Macro: Idle")
+        
+        # Deactivate macro session
+        with self.macro_session_lock:
+            self.macro_session_active = False
+            self.macro_session_buffer.clear()
     
     def _wait_for_response(self, expected: str, timeout: float) -> bool:
         """Wait for expected response from serial port"""
         start_time = time.time()
-        received_buffer = ""
+        expected_stripped = expected.strip()
         
+        # Check if the response is already in the session buffer
+        with self.macro_session_lock:
+            for line in self.macro_session_buffer:
+                line_stripped = line.strip()
+                if expected_stripped in line_stripped:
+                    return True
+        
+        # If not found in buffer, wait for new data to arrive in the session buffer
         while time.time() - start_time < timeout:
-            if hasattr(self, 'serial_port') and self.serial_port:
-                try:
-                    if self.serial_port.in_waiting > 0:
-                        data = self.serial_port.read(self.serial_port.in_waiting)
-                        received_buffer += data.decode('utf-8', errors='ignore')
-                        
-                        if expected in received_buffer:
-                            return True
-                except:
-                    pass
+            with self.macro_session_lock:
+                # Check entire session buffer for the expected response
+                for line in self.macro_session_buffer:
+                    line_stripped = line.strip()
+                    if expected_stripped in line_stripped:
+                        return True
             
             time.sleep(0.01)  # Small sleep to avoid busy waiting
         
@@ -2091,6 +2167,15 @@ class MainWindow(QMainWindow):
     def handle_serial_data(self, data: str) -> None:
         """Handle data received from the serial reader thread"""
         self.print_to_display('> ' + data)
+        
+        # Add to macro session buffer if a macro is running
+        if self.macro_session_active:
+            with self.macro_session_lock:
+                # Split into lines and add each line to session buffer
+                lines = data.split('\n')
+                for line in lines:
+                    if line.strip():  # Don't add empty lines
+                        self.macro_session_buffer.append(line)
     
     def handle_serial_error(self, error: str) -> None:
         """Handle errors from the serial reader thread"""

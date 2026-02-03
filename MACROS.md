@@ -43,11 +43,13 @@ Pauses macro execution and displays a dialog with a custom message.
 ### Output Block (Green)
 Waits for expected output from the serial port with timeout.
 - **Expected**: The text to wait for (e.g., "OK", "READY")
+  - Matching is done per line with leading/trailing spaces stripped
 - **Timeout**: Maximum time to wait in milliseconds
 - **On Fail**: Action to take if expected output is not received
   - **Continue**: Continue to next block
   - **Exit Macro**: Stop macro execution
   - **Custom Command**: Send a specific command (e.g., retry or recovery command)
+  - **Dialog for Command**: Show dialog asking user to enter a recovery command
 
 ## YAML Format
 
@@ -117,6 +119,22 @@ steps:
   - dialog_wait:
       message: "Signal check complete. Proceed with configuration?"
   - input: "AT+CREG?"
+```
+
+### Error Recovery with Dialog
+```yaml
+name: Flexible Error Recovery
+steps:
+  - input: "AT+CPIN?"
+  - output:
+      expected: "READY"
+      timeout: 2000
+      fail: DIALOG
+  - input: "AT+CREG?"
+  - output:
+      expected: "+CREG: 0,1"
+      timeout: 5000
+      fail: DIALOG
 ```   expected: "+CSQ:"
       timeout: 1000
 ```
@@ -147,7 +165,11 @@ Use "Dialog Wait" for user confirmation or manual intervention points
 - Use appropriate timeouts based on your device's response time
 - Add delays between commands if your device needs processing time
 - Use the "Exit Macro" fail option for critical checks
-- Use "Custom Command" for error recovery scenarios
+- Use "Custom Command" for predefined error recovery scenarios
+- Use "Dialog for Command" when you need flexible, user-defined recovery actions
+- Use "Dialog Wait" for user confirmation or manual intervention points
+- Dialog Wait defaults to "Continue" button for quick execution flow
+- Output matching strips leading/trailing whitespace for more reliable matching
 - Macro execution runs in a separate thread to keep the UI responsive
 
 ## Location

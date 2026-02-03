@@ -63,7 +63,6 @@ class StyleManager:
                 background-color: {self.accent_color};
                 color: {self.font_color};
                 border: 1px solid {self.accent_color};
-                font-weight: bold;
                 padding: 4px;
                 font-size: {self.font_size}pt;
             }}
