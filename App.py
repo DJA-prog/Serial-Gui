@@ -241,7 +241,9 @@ class MainWindow(QMainWindow):
                 'tx_line_ending': 'LN',
                 'reveal-hidden-char': False,
                 'last-baudrate': 115200,
-                'custom-baudrate': 115200
+                'custom-baudrate': 115200,
+                'filter_empty_lines': False,
+                'custom_line_filter': ''
             }
         }
         self.default_settings = self.settings.copy()
@@ -1106,6 +1108,12 @@ class MainWindow(QMainWindow):
         # Row 17: enable_tooltips (bool)
         enable_tooltips_item = QTableWidgetItem(str(settings.get("enable_tooltips", True)))
         self.settings_table.setItem(17, 1, enable_tooltips_item)
+        # Row 18: filter_empty_lines (bool)
+        filter_empty_lines_item = QTableWidgetItem(str(settings.get("filter_empty_lines", False)))
+        self.settings_table.setItem(18, 1, filter_empty_lines_item)
+        # Row 19: custom_line_filter (string)
+        custom_line_filter_item = QTableWidgetItem(str(settings.get("custom_line_filter", "")))
+        self.settings_table.setItem(19, 1, custom_line_filter_item)
 
     def tab_settings(self) -> None:
 
@@ -1115,7 +1123,7 @@ class MainWindow(QMainWindow):
         # Settings table
         self.settings_table = QTableWidget()
         self.settings_table.setToolTip("Double-click a value to edit. For colors, a color picker will appear.")
-        self.settings_table.setRowCount(18)
+        self.settings_table.setRowCount(20)
         self.settings_table.setColumnCount(2)
         self.settings_table.setHorizontalHeaderLabels(["Setting", "Value"])
         v_header = self.settings_table.verticalHeader()
@@ -1149,6 +1157,8 @@ class MainWindow(QMainWindow):
         self.settings_table.setItem(15, 0, QTableWidgetItem("Max Output Lines"))
         self.settings_table.setItem(16, 0, QTableWidgetItem("Custom Baud Rate"))
         self.settings_table.setItem(17, 0, QTableWidgetItem("Enable Tooltips"))
+        self.settings_table.setItem(18, 0, QTableWidgetItem("Filter Empty Lines"))
+        self.settings_table.setItem(19, 0, QTableWidgetItem("Custom Line Filter"))
 
         self.tab_settings_set()
 
@@ -1163,7 +1173,7 @@ class MainWindow(QMainWindow):
             general = self.settings["general"]
 
             # Boolean options
-            if key in ("Auto Clear Output", "Maximized", "Reveal Hidden Char", "DTR", "RTS", "Enable Tooltips"):
+            if key in ("Auto Clear Output", "Maximized", "Reveal Hidden Char", "DTR", "RTS", "Enable Tooltips", "Filter Empty Lines"):
                 value_item = self.settings_table.item(row, 1)
                 if value_item is None:
                     return
@@ -1177,6 +1187,8 @@ class MainWindow(QMainWindow):
                     general["maximized"] = new_value
                 elif key == "Reveal Hidden Char":
                     general["reveal_hidden_char"] = new_value
+                elif key == "Filter Empty Lines":
+                    general["filter_empty_lines"] = new_value
                 elif key == "DTR":
                     general["dtr_state"] = new_value
                     # Update serial port if connected
@@ -1307,6 +1319,14 @@ class MainWindow(QMainWindow):
                     doc = self.response_display.document()
                     if doc:
                         doc.setMaximumBlockCount(new_value)
+                    self.save_settings()
+            
+            elif key == "Custom Line Filter":
+                current_value = str(general.get("custom_line_filter", ""))
+                new_value, ok = QInputDialog.getText(self, "Edit Custom Line Filter", "Enter line to filter (exact match, stripped):\n(Leave blank to disable)", text=current_value)
+                if ok:
+                    self.settings_table.setItem(row, 1, QTableWidgetItem(new_value))
+                    general["custom_line_filter"] = new_value
                     self.save_settings()
 
         self.settings_table.cellDoubleClicked.connect(edit_setting)
@@ -2156,7 +2176,7 @@ class MainWindow(QMainWindow):
             else:
                 # Send just the line ending when input is empty
                 self.serial_port.write(tx_value.encode())
-                # self.print_to_display(f"< (blank)")
+                self.print_to_display("<")
             
             self.command_input.clear()
 
@@ -2166,14 +2186,42 @@ class MainWindow(QMainWindow):
 
     def handle_serial_data(self, data: str) -> None:
         """Handle data received from the serial reader thread"""
-        self.print_to_display('> ' + data)
+        # Get filter settings
+        filter_empty = self.settings.get("general", {}).get("filter_empty_lines", False)
+        custom_filter = self.settings.get("general", {}).get("custom_line_filter", "").strip()
         
-        # Add to macro session buffer if a macro is running
+        # Split data into lines for filtering
+        lines = data.split('\n')
+        filtered_lines = []
+        
+        for line in lines:
+            # Filter empty lines if enabled
+            if filter_empty and not line.strip():
+                continue
+            
+            # Filter lines matching custom filter (exact match after stripping)
+            if custom_filter and line.strip() == custom_filter:
+                continue
+            
+            filtered_lines.append(line)
+        
+        # Only display if there are non-empty lines left after filtering
+        if filtered_lines:
+            # Remove trailing empty strings from split
+            while filtered_lines and not filtered_lines[-1].strip():
+                filtered_lines.pop()
+            
+            # Only display if we still have content
+            if filtered_lines or not filter_empty:
+                filtered_data = '\n'.join(filtered_lines)
+                if filtered_data.strip():  # Only display if there's actual content
+                    self.print_to_display('> ' + filtered_data)
+        
+        # Add to macro session buffer if a macro is running (unfiltered)
         if self.macro_session_active:
             with self.macro_session_lock:
                 # Split into lines and add each line to session buffer
-                lines = data.split('\n')
-                for line in lines:
+                for line in data.split('\n'):
                     if line.strip():  # Don't add empty lines
                         self.macro_session_buffer.append(line)
     

@@ -41,11 +41,20 @@
 - **Change tracking** - Monitors all add, edit, and remove operations
 - **Automatic state management** - Clears change flag after successful save
 
+### 📊 Output Display Enhancements
+- **Filter Empty Lines** - New setting to hide lines with no content from display
+- **Custom Line Filter** - Filter specific lines by exact text match (stripped)
+- **Blank line indicator** - Shows `<` when sending empty input for visual confirmation
+- **Smart filtering** - Filters don't affect macro response matching
+
 ### 📚 Documentation Updates
 - **MACROS.md expanded** - Complete documentation for Dialog Wait Block
 - **Fail action examples** - New examples showing Dialog for Command usage
 - **Interactive Configuration example** - Sample macro demonstrating dialog wait usage
 - **Error Recovery example** - Flexible error recovery pattern with Dialog for Command
+- **THEMES.md added** - Comprehensive guide for creating and applying custom color themes
+- **Theme gallery** - Pre-made themes including Default and Hacker themes
+- **Color best practices** - Tips for contrast, readability, and accessibility
 
 ### 🐛 Bug Fixes
 - **Fixed macro response detection** - Responses no longer missed when arriving before OutputBlock starts waiting
@@ -61,9 +70,10 @@
 
 ## Upgrade Notes
 
-- **No breaking changes** - All v2.2.0 macros fully compatible
+- **No breaking changes** - All v2.2.0 macros and settings fully compatible
+- **New features are additions** - Dialog Wait and Dialog for Command are optional
 - **Automatic fail action handling** - Old macros with fail actions work without modification
-- **New fail option available** - "Dialog for Command" can be added to existing macros
+- **New settings default to off** - Filter Empty Lines and Custom Line Filter disabled by default
 
 ## Known Issues
 
@@ -84,4 +94,4 @@
 
 ---
 
-**Full Changelog:** [View on GitHub](https://github.com/DJA-prog/Serial-Gui/compare/v2.2.0...v2.2.1)
+**Full Changelog:** [View on GitHub](https://github.com/DJA-prog/Serial-Gui/compare/v2.2.0...v2.3.0)
