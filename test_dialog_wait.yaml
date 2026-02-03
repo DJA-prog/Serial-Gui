@@ -1,0 +1,10 @@
+name: Test Dialog Wait
+steps:
+  - input: "AT"
+  - delay: 500
+  - dialog_wait:
+      message: "Check the LED status. Is it blinking? Click Continue to proceed."
+  - input: "AT+CSQ"
+  - dialog_wait:
+      message: "Verify signal strength in display. Ready to continue?"
+  - input: "AT+CREG?"

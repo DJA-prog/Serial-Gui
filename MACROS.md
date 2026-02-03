@@ -5,9 +5,10 @@ The macro system allows you to create automated sequences of serial commands wit
 
 ## Features
 - **Drag-and-Drop Editor**: Scratch-like interface for creating macros
-- **Three Block Types**:
+- **Four Block Types**:
   - **Input Block** (Blue): Send commands to the serial port
   - **Delay Block** (Orange): Add delays between commands (in milliseconds)
+  - **Dialog Wait Block** (Purple): Pause and show a dialog with Continue/End options
   - **Output Block** (Green): Wait for expected responses with timeout and fail handling
 
 ## Creating a Macro
@@ -31,6 +32,14 @@ Sends a command to the serial port.
 Pauses execution for a specified time.
 - **Wait**: Time in milliseconds (0-60000 ms)
 
+### Dialog Wait Block (Purple)
+Pauses macro execution and displays a dialog with a custom message.
+- **Message**: Custom text to display in the dialog
+- **Options**: Continue (default) or End
+- **Behavior**: 
+  - **Continue**: Proceeds to the next step
+  - **End**: Stops macro execution immediately
+
 ### Output Block (Green)
 Waits for expected output from the serial port with timeout.
 - **Expected**: The text to wait for (e.g., "OK", "READY")
@@ -49,6 +58,8 @@ name: Macro Name
 steps:
   - input: "AT"
   - delay: 1000
+  - dialog_wait:
+      message: "Check device status before continuing?"
   - output:
       expected: "OK"
       timeout: 1000
@@ -87,7 +98,26 @@ steps:
   - delay: 1000
   - input: "AT+CSQ"
   - output:
+   
+
+### Interactive Configuration
+```yaml
+name: Interactive Setup
+steps:
+  - input: "AT"
+  - output:
+      expected: "OK"
+      timeout: 1000
+  - dialog_wait:
+      message: "Device ready. Connect antenna now and click Continue."
+  - input: "AT+CSQ"
+  - output:
       expected: "+CSQ:"
+      timeout: 2000
+  - dialog_wait:
+      message: "Signal check complete. Proceed with configuration?"
+  - input: "AT+CREG?"
+```   expected: "+CSQ:"
       timeout: 1000
 ```
 
@@ -97,7 +127,9 @@ steps:
 1. Connect to a serial port first
 2. Click on any macro button in the Macros tab
 3. Watch the output display for execution progress
-
+Use "Dialog Wait" for user confirmation or manual intervention points
+- Dialog Wait defaults to "Continue" button for quick execution flow
+- 
 ### Editing a Macro
 1. Right-click on a macro button
 2. Select "Edit Macro"

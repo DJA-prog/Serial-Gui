@@ -171,6 +171,7 @@ class MainWindow(QMainWindow):
     macro_set_input_signal = pyqtSignal(str)
     macro_send_command_signal = pyqtSignal()
     macro_status_signal = pyqtSignal(str)
+    macro_dialog_signal = pyqtSignal(str, object)  # (message, result_queue)
     
     # Hard-coded options that should not be saved to settings.yaml
     OPTIONS = {
@@ -306,6 +307,7 @@ class MainWindow(QMainWindow):
         self.macro_set_input_signal.connect(self.command_input.setText)
         self.macro_send_command_signal.connect(self.send_command)
         self.macro_status_signal.connect(self.macro_status_label.setText)
+        self.macro_dialog_signal.connect(self._show_macro_dialog)
 
     def set_style(self) -> None:
         """Apply stylesheet using StyleManager"""
@@ -845,6 +847,19 @@ class MainWindow(QMainWindow):
         """Thread-safe wrapper for updating macro status using signal"""
         self.macro_status_signal.emit(status)
     
+    def _show_macro_dialog(self, message: str, result_queue: Queue) -> None:
+        """Show a dialog with Continue/End options (called in main thread)"""
+        reply = QMessageBox.question(
+            self,
+            "Macro Dialog",
+            message,
+            QMessageBox.Ok | QMessageBox.Cancel,
+            QMessageBox.Ok  # Continue is default
+        )
+        
+        # Put result in queue (True for Continue, False for End)
+        result_queue.put(reply == QMessageBox.Ok)
+    
     def _execute_macro_steps(self, macro_name: str, steps: list) -> None:
         """Execute macro steps in sequence"""
         self._update_macro_status_threadsafe(f"Macro: Running '{macro_name}'")
@@ -868,6 +883,32 @@ class MainWindow(QMainWindow):
                     delay_ms = step['delay']
                     self._print_to_display_threadsafe(f"Step {i}: Delay {delay_ms}ms")
                     time.sleep(delay_ms / 1000.0)
+                    
+                elif 'dialog_wait' in step:
+                    # Show dialog and wait for user response
+                    dialog_config = step['dialog_wait']
+                    message = dialog_config.get('message', 'Continue macro execution?')
+                    self._print_to_display_threadsafe(f"Step {i}: Dialog wait")
+                    
+                    # Create a queue to receive the result
+                    result_queue: Queue[bool] = Queue()
+                    
+                    # Show dialog in main thread and wait for response
+                    self.macro_dialog_signal.emit(message, result_queue)
+                    
+                    # Wait for user response (blocking)
+                    user_choice = result_queue.get()
+                    
+                    if not user_choice:
+                        # User clicked End
+                        self._print_to_display_threadsafe(f"Step {i}: User ended macro")
+                        self._print_to_display_threadsafe(f"══════════════════════════════════════")
+                        self._print_to_display_threadsafe(f"Macro ENDED by user")
+                        self._print_to_display_threadsafe(f"══════════════════════════════════════")
+                        self._update_macro_status_threadsafe("Macro: Idle")
+                        return
+                    else:
+                        self._print_to_display_threadsafe(f"Step {i}: User continued macro")
                     
                 elif 'output' in step:
                     # Expect output

@@ -147,6 +147,40 @@ class DelayBlock(MacroBlock):
         return {"delay": self.delay_spinbox.value()}
 
 
+class DialogWaitBlock(MacroBlock):
+    """Block for displaying a dialog with custom message and continue/end options"""
+    
+    def __init__(self, parent=None, message: str = "", accent_color: str = "#1E90FF", hover_color: str = "#63B8FF", background_color: str = "#1E1E1E"):
+        super().__init__("dialog_wait", "Dialog Wait", parent, accent_color, hover_color, background_color)
+        self.message_input.setText(message)
+    
+    def setup_block_content(self, layout: QHBoxLayout):
+        layout_last = QVBoxLayout()
+        label = QLabel("Dialog Wait")
+        size_policy = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        label.setSizePolicy(size_policy)
+        layout_last.addWidget(label)
+        
+        # Message input
+        h_layout = QHBoxLayout()
+        h_layout.addWidget(QLabel("Message:"))
+        self.message_input = QLineEdit()
+        self.message_input.setPlaceholderText("Enter dialog message")
+        self.message_input.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        h_layout.addWidget(self.message_input)
+        layout_last.addLayout(h_layout)
+        
+        # Info label
+        info_label = QLabel("Pauses macro and shows dialog with Continue/End")
+        info_label.setStyleSheet("color: gray; font-size: 9pt;")
+        layout_last.addWidget(info_label)
+        
+        layout.addLayout(layout_last)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {"dialog_wait": {"message": self.message_input.text()}}
+
+
 class OutputBlock(MacroBlock):
     """Block for expecting output with conditional logic"""
     
@@ -256,6 +290,8 @@ class MacroCanvas(QWidget):
             block = InputBlock(self.container, kwargs.get('command', ''), self.accent_color, self.hover_color, self.background_color)
         elif block_type == "delay":
             block = DelayBlock(self.container, kwargs.get('delay', 1000), self.accent_color, self.hover_color, self.background_color)
+        elif block_type == "dialog_wait":
+            block = DialogWaitBlock(self.container, kwargs.get('message', ''), self.accent_color, self.hover_color, self.background_color)
         elif block_type == "output":
             block = OutputBlock(self.container, kwargs.get('expected', ''), kwargs.get('timeout', 1000), self.accent_color, self.hover_color, self.background_color)
             
@@ -448,6 +484,7 @@ class MacroEditor(QDialog):
         block_types = [
             ("input", "Add Send Command"),
             ("delay", "Add Delay"),
+            ("dialog_wait", "Add Dialog Wait"),
             ("output", "Add Expect Output")
         ]
         for block_type, label in block_types:
@@ -481,6 +518,9 @@ class MacroEditor(QDialog):
                     self.canvas.add_block('input', command=step['input'])
                 elif 'delay' in step:
                     self.canvas.add_block('delay', delay=step['delay'])
+                elif 'dialog_wait' in step:
+                    dialog_data = step['dialog_wait']
+                    self.canvas.add_block('dialog_wait', message=dialog_data.get('message', ''))
                 elif 'output' in step:
                     output_data = step['output']
                     self.canvas.add_block('output', 
