@@ -20,26 +20,34 @@ A modern, cross-platform serial monitor application built with PyQt5. This tool 
 - **Threaded serial reader** prevents UI freezing during data bursts
 - **Command history** with quick access (single-click to insert, double-click to send)
 - **Output display** with optional hex conversion and hidden character visualization
+- **Output filtering** with empty line removal and custom line filters
+- **Blank line indicators** for improved readability
 
 ### Command Management
 - **Command sets** loaded from YAML files with two categories:
   - Commands requiring no input (click to send)
   - Commands requiring input (click to insert template)
 - **Commands Editor** for creating and managing command sets
+- **Exit safety** prevents accidental loss of unsaved command sets
 - **Last selected command set** is remembered across sessions
 
 ### Macro System
 - **Drag-and-drop macro editor** with Scratch-like interface
-- **Three block types**:
+- **Four block types**:
   - Input blocks: Send commands
   - Delay blocks: Wait for specified duration
-  - Output blocks: Expect response with timeout
+  - Output blocks: Expect response with timeout and fail actions
+  - Dialog Wait blocks: Pause macro for user decision
+- **Advanced fail actions**: Continue, End macro, or Dialog for custom command
+- **Improved response detection** with per-line matching and session buffer
 - **Macro execution** with visual feedback
+- **Exit safety** prevents accidental loss of unsaved macros
 
 ### Customization
 - **Centralized theming** with StyleManager
 - **Configurable colors**: Accent, hover, font, and background
 - **Automatic color derivation** for secondary/tertiary backgrounds
+- **Pre-made color themes** with gallery (see THEMES.md)
 - **Font size adjustment** for accessibility
 - **Customizable quick-access buttons** (10 configurable buttons)
 - **Tooltips** with enable/disable option
@@ -101,14 +109,17 @@ Pre-built single-file executables for Windows will be available in the [Releases
 
 ### Macros Tab
 - Create drag-and-drop automation sequences
-- Add Input, Delay, and Output blocks
-- Save macros for repeated use
+- Add Input, Delay, Output, and Dialog Wait blocks
+- Configure fail actions: Continue, End, or Dialog for custom command
+- Save macros for repeated use (exit safety prevents accidental loss)
 - Execute macros with visual status updates
+- See MACROS.md for complete documentation and examples
 
 ### Settings Tab
-- **Colors**: Click to change accent, hover, font, and background colors
+- **Colors**: Click to change accent, hover, font, and background colors (see THEMES.md for theme gallery)
 - **Serial Settings**: Configure DTR, RTS, data bits, parity, stop bits, flow control
 - **Display Options**: Toggle tooltips, hidden characters, auto-clear output
+- **Output Filtering**: Filter empty lines, set custom line filter for noise reduction
 - **Line Endings**: Choose CR, LF, or CRLF for transmitted data
 - **Maximum Output Lines**: Set buffer limit (default: 10000)
 
@@ -131,6 +142,12 @@ Settings are stored in OS-specific locations:
 - `commands/*.yaml`: Command set definitions
 - `macros/*.yaml`: Saved macro sequences
 
+### Documentation
+- `README.md`: Main application documentation
+- `MACROS.md`: Complete macro system guide with examples
+- `THEMES.md`: Custom color theme gallery and creation guide
+- `release_notes/`: Version history and changelogs
+
 ### Command Set Format
 ```yaml
 no_input_commands:
@@ -151,10 +168,10 @@ input_required_commands:
 ## Architecture
 
 ### Key Components
-- **App.py**: Main application window and logic (v1.0.0)
+- **App.py**: Main application window and logic (v2.3.0)
 - **StyleManager.py**: Centralized theming and stylesheet management
-- **MacroEditor.py**: Drag-and-drop macro creation interface
-- **CommandsEditor.py**: Command set editor with dual-list layout
+- **MacroEditor.py**: Drag-and-drop macro creation interface with exit safety
+- **CommandsEditor.py**: Command set editor with dual-list layout and exit safety
 - **SerialReaderThread**: Background thread for non-blocking serial I/O
 
 ### Design Patterns
@@ -166,18 +183,22 @@ input_required_commands:
 ## Directory Structure
 
 ```
-App.py                      # Main application (v1.0.0)
+App.py                      # Main application (v2.3.0)
 StyleManager.py            # Centralized styling
 MacroEditor.py             # Macro creation interface
 CommandsEditor.py          # Command set editor
-README.md
+README.md                  # Main documentation
+MACROS.md                  # Macro system guide
+THEMES.md                  # Color theme gallery
 requirements.txt
-MACROS.md                  # Macro system documentation
 commands/
     sim800l.yaml          # SIM800L AT commands
     sim808.yaml           # SIM808 AT commands
 images/
+    default_theme.png     # Default theme screenshot
+    hacker_mint_theme.png # Hacker theme screenshot
 logs/
+release_notes/            # Version changelogs
 ```
 
 ## Similar Software
