@@ -423,6 +423,10 @@ class MacroEditor(QDialog):
         self.setWindowTitle("Macro Editor")
         self.resize(750, 600)
         
+        # Track unsaved changes
+        self.has_unsaved_changes = False
+        self.initial_state = None  # Will store initial macro state for comparison
+        
         # Main layout
         main_layout = QVBoxLayout(self)
         
@@ -480,6 +484,12 @@ class MacroEditor(QDialog):
         if macro_path and macro_path.exists():
             self.load_macro(macro_path)
         
+        # Store initial state for change detection
+        self.initial_state = self.get_current_state()
+        
+        # Connect change signals
+        self.name_input.textChanged.connect(self.mark_as_changed)
+        
         # Apply styling
         self.apply_style()
     
@@ -487,6 +497,25 @@ class MacroEditor(QDialog):
         """Apply stylesheet from style manager"""
         if self.style_manager:
             self.setStyleSheet(self.style_manager.get_dialog_stylesheet())
+    
+    def get_current_state(self) -> Dict[str, Any]:
+        """Get current state of the macro for comparison"""
+        return {
+            'name': self.name_input.text().strip(),
+            'blocks': len(self.canvas.blocks),
+            'steps': self.canvas.to_yaml_list() if self.canvas.blocks else []
+        }
+    
+    def mark_as_changed(self):
+        """Mark the editor as having unsaved changes"""
+        self.has_unsaved_changes = True
+    
+    def has_changes(self) -> bool:
+        """Check if there are unsaved changes"""
+        if not self.has_unsaved_changes:
+            return False
+        current_state = self.get_current_state()
+        return current_state != self.initial_state
     
     def create_block_palette(self) -> QWidget:
         """Create the left panel with block type buttons"""
@@ -506,11 +535,37 @@ class MacroEditor(QDialog):
             # row.addWidget(QLabel(label))
             add_btn = QPushButton(label)
             # add_btn.setMaximumWidth(120)
-            add_btn.clicked.connect(lambda _, t=block_type: self.canvas.add_block(t))
+            add_btn.clicked.connect(lambda _, t=block_type: self.on_add_block(t))
             row.addWidget(add_btn)
             palette_layout.addLayout(row)
         palette_layout.addStretch()
         return palette_widget
+    
+    def on_add_block(self, block_type: str):
+        """Handle adding a block and mark as changed"""
+        self.canvas.add_block(block_type)
+        self.mark_as_changed()
+    
+    def reject(self):
+        """Override reject to check for unsaved changes"""
+        if self.has_changes():
+            reply = QMessageBox.question(
+                self,
+                "Unsaved Changes",
+                "You have unsaved changes. Do you want to save before closing?",
+                QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
+                QMessageBox.Save
+            )
+            
+            if reply == QMessageBox.Save:
+                self.save_macro()
+                # Only close if save was successful (save_macro calls accept)
+                return
+            elif reply == QMessageBox.Cancel:
+                return
+            # If Discard, continue to close
+        
+        super().reject()
     
     def load_macro(self, macro_path: Path):
         """Load an existing macro from YAML file"""
@@ -606,3 +661,4 @@ class MacroEditor(QDialog):
         
         if reply == QMessageBox.Yes:
             self.canvas.clear_blocks()
+            self.mark_as_changed()

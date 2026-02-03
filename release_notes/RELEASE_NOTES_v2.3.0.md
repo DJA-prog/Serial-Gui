@@ -1,8 +1,8 @@
-# Serial Communication Monitor v2.2.1 Release Notes
+# Serial Communication Monitor v2.3.0 Release Notes
 
 **Release Date:** February 3, 2026
 
-## What's New in v2.2.1
+## What's New in v2.3.0
 
 ### 🎯 Macro System Enhancements
 
@@ -33,6 +33,13 @@
 - **Fail action persistence** - OutputBlock fail settings now correctly loaded when editing macros
 - **Four fail actions supported** - All fail modes (Continue, Exit, Custom Command, Dialog) properly saved and restored
 - **Custom command text** - Recovery commands preserved across edit sessions
+- **Exit safety** - Prompts to save or discard changes when closing with unsaved work
+- **Change tracking** - Detects modifications to macro name and blocks
+
+### 🔧 Commands Editor Improvements
+- **Exit safety** - Prompts to save or discard changes when closing with unsaved work
+- **Change tracking** - Monitors all add, edit, and remove operations
+- **Automatic state management** - Clears change flag after successful save
 
 ### 📚 Documentation Updates
 - **MACROS.md expanded** - Complete documentation for Dialog Wait Block

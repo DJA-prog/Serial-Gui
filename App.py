@@ -17,7 +17,7 @@ from CommandsEditor import CommandsEditor
 from StyleManager import StyleManager
 
 # Application version
-__version__ = "2.1.1"
+__version__ = "2.3.0"
 
 # import sip
 

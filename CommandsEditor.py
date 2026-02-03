@@ -31,10 +31,17 @@ class CommandsEditor(QDialog):
         self.no_input_commands: Dict[str, str] = {}
         self.input_required_commands: Dict[str, str] = {}
         
+        # Track unsaved changes
+        self.has_unsaved_changes = False
+        self.initial_state: Optional[Dict[str, Any]] = None
+        
         self.setWindowTitle("Commands Editor")
         self.resize(900, 700)
         self.setup_ui()
         self.apply_style()
+        
+        # Store initial state after setup
+        self.initial_state = self.get_current_state()
     
     def setup_ui(self):
         """Setup the main UI layout"""
@@ -126,7 +133,7 @@ class CommandsEditor(QDialog):
         bottom_bar.addWidget(save_btn)
         
         close_btn = QPushButton("Close")
-        close_btn.clicked.connect(self.accept)
+        close_btn.clicked.connect(self.reject)
         bottom_bar.addWidget(close_btn)
         
         main_layout.addLayout(bottom_bar)
@@ -136,6 +143,27 @@ class CommandsEditor(QDialog):
         if self.style_manager:
             style = self.style_manager.get_dialog_stylesheet()
             self.setStyleSheet(style)
+    
+    def get_current_state(self) -> Dict[str, Any]:
+        """Get current state for change detection"""
+        return {
+            'file': self.current_file,
+            'no_input': dict(self.no_input_commands),
+            'input_required': dict(self.input_required_commands)
+        }
+    
+    def mark_as_changed(self):
+        """Mark the editor as having unsaved changes"""
+        self.has_unsaved_changes = True
+    
+    def has_changes(self) -> bool:
+        """Check if there are unsaved changes"""
+        if not self.has_unsaved_changes:
+            return False
+        if self.initial_state is None:
+            return False
+        current_state = self.get_current_state()
+        return current_state != self.initial_state
     
     def add_no_input_command(self):
         """Add a new command to the no input list"""
@@ -153,6 +181,7 @@ class CommandsEditor(QDialog):
         
         self.no_input_commands[command.strip()] = description.strip()
         self.refresh_lists()
+        self.mark_as_changed()
     
     def edit_no_input_command(self):
         """Edit selected command in no input list"""
@@ -190,6 +219,7 @@ class CommandsEditor(QDialog):
         # Add updated entry
         self.no_input_commands[command.strip()] = description.strip()
         self.refresh_lists()
+        self.mark_as_changed()
     
     def remove_no_input_command(self):
         """Remove selected command from no input list"""
@@ -207,6 +237,7 @@ class CommandsEditor(QDialog):
         if command in self.no_input_commands:
             del self.no_input_commands[command]
             self.refresh_lists()
+            self.mark_as_changed()
     
     def add_input_required_command(self):
         """Add a new command to the input required list"""
@@ -224,6 +255,7 @@ class CommandsEditor(QDialog):
         
         self.input_required_commands[command.strip()] = description.strip()
         self.refresh_lists()
+        self.mark_as_changed()
     
     def edit_input_required_command(self):
         """Edit selected command in input required list"""
@@ -261,6 +293,7 @@ class CommandsEditor(QDialog):
         # Add updated entry
         self.input_required_commands[command.strip()] = description.strip()
         self.refresh_lists()
+        self.mark_as_changed()
     
     def remove_input_required_command(self):
         """Remove selected command from input required list"""
@@ -278,6 +311,7 @@ class CommandsEditor(QDialog):
         if command in self.input_required_commands:
             del self.input_required_commands[command]
             self.refresh_lists()
+            self.mark_as_changed()
     
     def refresh_lists(self):
         """Refresh both list widgets with current data"""
@@ -322,5 +356,9 @@ class CommandsEditor(QDialog):
             
             self.file_label.setText(f"Saved: {self.current_file}")
             QMessageBox.information(self, "Success", f"Saved to {self.current_file}")
+            
+            # Reset change tracking after successful save
+            self.has_unsaved_changes = False
+            self.initial_state = self.get_current_state()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save file: {e}")
