@@ -19,6 +19,7 @@ from StyleManager import StyleManager
 # Application version
 __version__ = "2.3.0"
 
+# sip is uncommented in windows pyinstaller build
 # import sip
 
 from PyQt5.QtWidgets import (

@@ -99,6 +99,7 @@ hover_color: '#4A90D9'
 font_color: '#E0E0E0'
 background_color: '#0A1628'
 ```
+![Midnight Blue Theme](images/midnight_blue_theme.png)
 Professional dark blue theme with subtle contrasts.
 
 ### Sunset
@@ -108,6 +109,7 @@ hover_color: '#FFB347'
 font_color: '#F7F7F7'
 background_color: '#1A1A2E'
 ```
+![Sunset Theme](images/sunset_theme.png)
 Warm orange/red accents on deep navy.
 
 ### Monochrome
@@ -117,6 +119,7 @@ hover_color: '#888888'
 font_color: '#DDDDDD'
 background_color: '#1C1C1C'
 ```
+![Monochrome Theme](images/monochrome_theme.png)
 Pure grayscale, minimal distraction.
 
 ### Forest
@@ -126,6 +129,7 @@ hover_color: '#4F7942'
 font_color: '#C8E6C9'
 background_color: '#0D1B0D'
 ```
+![Forest Theme](images/forest_theme.png)
 Natural green tones, easy on the eyes.
 
 ### Purple Haze
@@ -135,6 +139,7 @@ hover_color: '#AB83A1'
 font_color: '#E1BEE7'
 background_color: '#1A0B1A'
 ```
+![Purple Haze Theme](images/purple_haze_theme.png)
 Rich purple for a unique look.
 
 ## Troubleshooting
