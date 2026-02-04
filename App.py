@@ -15,9 +15,10 @@ from queue import Queue
 from MacroEditor import MacroEditor
 from CommandsEditor import CommandsEditor
 from StyleManager import StyleManager
+from ThemesDialog import ThemesDialog
 
 # Application version
-__version__ = "2.3.0"
+__version__ = "2.4.0"
 
 # sip is uncommented in windows pyinstaller build
 # import sip
@@ -858,17 +859,20 @@ class MainWindow(QMainWindow):
         self.macro_status_signal.emit(status)
     
     def _show_macro_dialog(self, message: str, result_queue: Queue) -> None:
-        """Show a dialog with Continue/End options (called in main thread)"""
-        reply = QMessageBox.question(
-            self,
-            "Macro Dialog",
-            message,
-            QMessageBox.Ok | QMessageBox.Cancel,
-            QMessageBox.Ok  # Continue is default
-        )
+        """Show a dialog with Continue/End Macro options (called in main thread)"""
+        msgBox = QMessageBox(self)
+        msgBox.setWindowTitle("Macro Dialog")
+        msgBox.setText(message)
+        msgBox.setIcon(QMessageBox.Question)
         
-        # Put result in queue (True for Continue, False for End)
-        result_queue.put(reply == QMessageBox.Ok)
+        continue_btn = msgBox.addButton("Continue", QMessageBox.AcceptRole)
+        end_btn = msgBox.addButton("End Macro", QMessageBox.RejectRole)
+        msgBox.setDefaultButton(continue_btn)
+        
+        msgBox.exec_()
+        
+        # Put result in queue (True for Continue, False for End Macro)
+        result_queue.put(msgBox.clickedButton() == continue_btn)
     
     def _show_macro_input_dialog(self, prompt: str, result_queue: Queue) -> None:
         """Show an input dialog to get custom command from user (called in main thread)"""
@@ -961,6 +965,7 @@ class MainWindow(QMainWindow):
                     expected = output_config.get('expected', '')
                     timeout_ms = output_config.get('timeout', 1000)
                     fail_action = output_config.get('fail')
+                    success_action = output_config.get('success')
                     
                     self._print_to_display_threadsafe(f"Step {i}: Expect '{expected}' (timeout {timeout_ms}ms)")
                     
@@ -971,7 +976,9 @@ class MainWindow(QMainWindow):
                         self._print_to_display_threadsafe(f"Step {i}: ✗ FAILED - Expected output not received")
                         
                         # Handle fail action
-                        if fail_action == "EXIT":
+                        if fail_action == "IGNORE":
+                            self._print_to_display_threadsafe(f"Step {i}: Ignoring fail, continuing")
+                        elif fail_action == "EXIT":
                             self._print_to_display_threadsafe(f"══════════════════════════════════════")
                             self._print_to_display_threadsafe(f"Macro EXITED (fail condition)")
                             self._print_to_display_threadsafe(f"══════════════════════════════════════")
@@ -998,6 +1005,26 @@ class MainWindow(QMainWindow):
                                 time.sleep(0.1)
                             else:
                                 self._print_to_display_threadsafe(f"Step {i}: User cancelled - continuing without action")
+                        elif fail_action == "DIALOG_WAIT":
+                            # Show dialog and wait for user to continue or end
+                            self._print_to_display_threadsafe(f"Step {i}: Waiting for user decision")
+                            result_queue: Queue[bool] = Queue()
+                            self.macro_dialog_signal.emit("Expected output not received. Do you want to continue?", result_queue)
+                            
+                            user_choice = result_queue.get()
+                            
+                            if not user_choice:
+                                self._print_to_display_threadsafe(f"Step {i}: User ended macro")
+                                self._print_to_display_threadsafe(f"══════════════════════════════════════")
+                                self._print_to_display_threadsafe(f"Macro ENDED by user")
+                                self._print_to_display_threadsafe(f"══════════════════════════════════════")
+                                self._update_macro_status_threadsafe("Macro: Idle")
+                                with self.macro_session_lock:
+                                    self.macro_session_active = False
+                                    self.macro_session_buffer.clear()
+                                return
+                            else:
+                                self._print_to_display_threadsafe(f"Step {i}: User continued macro")
                         elif isinstance(fail_action, dict) and 'input' in fail_action:
                             # Send fail command
                             fail_cmd = fail_action['input']
@@ -1008,6 +1035,63 @@ class MainWindow(QMainWindow):
                             time.sleep(0.1)
                     else:
                         self._print_to_display_threadsafe(f"Step {i}: ✓ SUCCESS - Received expected output")
+                        
+                        # Handle success action
+                        if success_action == "IGNORE":
+                            self._print_to_display_threadsafe(f"Step {i}: Ignoring success, continuing")
+                        elif success_action == "EXIT":
+                            self._print_to_display_threadsafe(f"══════════════════════════════════════")
+                            self._print_to_display_threadsafe(f"Macro EXITED (success condition)")
+                            self._print_to_display_threadsafe(f"══════════════════════════════════════")
+                            self._update_macro_status_threadsafe("Macro: Idle")
+                            with self.macro_session_lock:
+                                self.macro_session_active = False
+                                self.macro_session_buffer.clear()
+                            return
+                        elif success_action == "DIALOG":
+                            # Show dialog to get custom command from user
+                            self._print_to_display_threadsafe(f"Step {i}: Requesting custom command from user")
+                            input_queue_success: Queue[Optional[str]] = Queue()
+                            self.macro_input_dialog_signal.emit("Expected output received. Enter command:", input_queue_success)
+                            
+                            user_command_success = input_queue_success.get()
+                            
+                            if user_command_success:
+                                self._print_to_display_threadsafe(f"Step {i}: User provided command '{user_command_success}'")
+                                self._set_command_input_threadsafe(user_command_success)
+                                time.sleep(0.05)
+                                self._send_command_threadsafe()
+                                time.sleep(0.1)
+                            else:
+                                self._print_to_display_threadsafe(f"Step {i}: User cancelled - continuing without action")
+                        elif success_action == "DIALOG_WAIT":
+                            # Show dialog and wait for user to continue or end
+                            self._print_to_display_threadsafe(f"Step {i}: Waiting for user decision")
+                            result_queue_success: Queue[bool] = Queue()
+                            self.macro_dialog_signal.emit("Expected output received. Do you want to continue?", result_queue_success)
+                            
+                            user_choice_success = result_queue_success.get()
+                            
+                            if not user_choice_success:
+                                self._print_to_display_threadsafe(f"Step {i}: User ended macro")
+                                self._print_to_display_threadsafe(f"══════════════════════════════════════")
+                                self._print_to_display_threadsafe(f"Macro ENDED by user")
+                                self._print_to_display_threadsafe(f"══════════════════════════════════════")
+                                self._update_macro_status_threadsafe("Macro: Idle")
+                                with self.macro_session_lock:
+                                    self.macro_session_active = False
+                                    self.macro_session_buffer.clear()
+                                return
+                            else:
+                                self._print_to_display_threadsafe(f"Step {i}: User continued macro")
+                        elif isinstance(success_action, dict) and 'input' in success_action:
+                            # Send success command
+                            success_cmd = success_action['input']
+                            self._print_to_display_threadsafe(f"Step {i}: Send success command '{success_cmd}'")
+                            self._set_command_input_threadsafe(success_cmd)
+                            time.sleep(0.05)
+                            self._send_command_threadsafe()
+                            time.sleep(0.1)
                         
             except Exception as e:
                 self._print_to_display_threadsafe(f"Step {i}: ✗ ERROR - {e}")
@@ -1426,6 +1510,11 @@ class MainWindow(QMainWindow):
         about_layout.addWidget(github_label)
         
         about_layout.addStretch()
+        
+        # Themes button at the bottom
+        themes_button = QPushButton("Select Theme")
+        themes_button.clicked.connect(self.open_themes_dialog)
+        about_layout.addWidget(themes_button)
 
     def open_configurations_directory(self, config_path: Path) -> None:
         """Opens the configuration directory in the system's file manager."""
@@ -1447,6 +1536,32 @@ class MainWindow(QMainWindow):
                 subprocess.run(["xdg-open", self.app_configs_path], check=False)
         except Exception as e:
             print(f"Failed to open configuration directory: {e}")
+
+    def open_themes_dialog(self) -> None:
+        """Opens the themes selection dialog"""
+        dialog = ThemesDialog(
+            parent=self,
+            current_settings=self.settings.get('general', {}),
+            apply_callback=self.apply_theme_settings
+        )
+        dialog.exec_()
+    
+    def apply_theme_settings(self, theme_settings: Dict[str, str]) -> None:
+        """
+        Apply theme settings and update the UI
+        
+        Args:
+            theme_settings: Dictionary containing color settings
+        """
+        # Update settings
+        for key, value in theme_settings.items():
+            self.settings['general'][key] = value
+        
+        # Save settings to file
+        self.save_settings()
+        
+        # Apply the new style
+        self.set_style()
 
     def save_settings(self) -> None:
         settings_file = os.path.join(self.app_configs_path, "settings.yaml")

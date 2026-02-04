@@ -31,7 +31,7 @@ class MacroBlock(QFrame):
         self.setLineWidth(2)
         self.setMinimumHeight(60)
         # self.setCursor(Qt.CursorShape.OpenHandCursor)
-        self.setMaximumHeight(160)
+        self.setMaximumHeight(200)
         
         # Set background color based on type
         self.set_block_color()
@@ -184,15 +184,23 @@ class DialogWaitBlock(MacroBlock):
 class OutputBlock(MacroBlock):
     """Block for expecting output with conditional logic"""
     
-    def __init__(self, parent=None, expected: str = "", timeout: int = 1000, fail_action: str = "Continue", fail_command: str = "", accent_color: str = "#1E90FF", hover_color: str = "#63B8FF", background_color: str = "#1E1E1E"):
+    def __init__(self, parent=None, expected: str = "", timeout: int = 1000, 
+                 fail_action: str = "Continue", fail_command: str = "",
+                 success_action: str = "Continue", success_command: str = "",
+                 accent_color: str = "#1E90FF", hover_color: str = "#63B8FF", background_color: str = "#1E1E1E"):
         super().__init__("output", "Expect Output", parent, accent_color, hover_color, background_color)
         self.expected_input.setText(expected)
         self.timeout_spinbox.setValue(timeout)
         # Set fail action after widgets are created
-        if fail_action in ["Continue", "Exit Macro", "Custom Command", "Dialog for Command"]:
+        if fail_action in ["Ignore", "Continue", "Exit Macro", "Custom Command", "Dialog for Command", "Dialog and Wait"]:
             self.fail_action_combo.setCurrentText(fail_action)
         if fail_command:
             self.fail_command_input.setText(fail_command)
+        # Set success action
+        if success_action in ["Ignore", "Continue", "Exit Macro", "Custom Command", "Dialog for Command", "Dialog and Wait"]:
+            self.success_action_combo.setCurrentText(success_action)
+        if success_command:
+            self.success_command_input.setText(success_command)
     
     def setup_block_content(self, layout: QHBoxLayout):
         layout_last = QVBoxLayout()
@@ -220,9 +228,24 @@ class OutputBlock(MacroBlock):
         h_layout2.addWidget(self.timeout_spinbox)
         layout_last.addLayout(h_layout2)
         
+        # Success action
+        self.success_action_combo = QComboBox()
+        self.success_action_combo.addItems(["Ignore", "Continue", "Exit Macro", "Custom Command", "Dialog for Command", "Dialog and Wait"])
+        self.success_action_combo.setCurrentText("Continue")
+        self.success_action_combo.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        layout_last.addWidget(QLabel("On Success:"))
+        layout_last.addWidget(self.success_action_combo)
+        
+        # Custom success command (hidden by default)
+        self.success_command_input = QLineEdit()
+        self.success_command_input.setPlaceholderText("Success command")
+        self.success_command_input.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        self.success_command_input.setVisible(False)
+        layout_last.addWidget(self.success_command_input)
+        
         # Fail action
         self.fail_action_combo = QComboBox()
-        self.fail_action_combo.addItems(["Continue", "Exit Macro", "Custom Command", "Dialog for Command"])
+        self.fail_action_combo.addItems(["Ignore", "Continue", "Exit Macro", "Custom Command", "Dialog for Command", "Dialog and Wait"])
         self.fail_action_combo.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
         layout_last.addWidget(QLabel("On Fail:"))
         layout_last.addWidget(self.fail_action_combo)
@@ -236,7 +259,11 @@ class OutputBlock(MacroBlock):
 
         layout.addLayout(layout_last)
         
+        self.success_action_combo.currentTextChanged.connect(self.on_success_action_changed)
         self.fail_action_combo.currentTextChanged.connect(self.on_fail_action_changed)
+    
+    def on_success_action_changed(self, text: str):
+        self.success_command_input.setVisible(text == "Custom Command")
     
     def on_fail_action_changed(self, text: str):
         self.fail_command_input.setVisible(text == "Custom Command")
@@ -249,8 +276,27 @@ class OutputBlock(MacroBlock):
             }
         }
         
+        # Handle success action
+        success_action = self.success_action_combo.currentText()
+        if success_action == "Ignore":
+            result["output"]["success"] = "IGNORE"
+        elif success_action == "Exit Macro":
+            result["output"]["success"] = "EXIT"
+        elif success_action == "Custom Command":
+            cmd = self.success_command_input.text()
+            if cmd:
+                result["output"]["success"] = {"input": cmd}
+        elif success_action == "Dialog for Command":
+            result["output"]["success"] = "DIALOG"
+        elif success_action == "Dialog and Wait":
+            result["output"]["success"] = "DIALOG_WAIT"
+        # Continue is default, no need to add it
+        
+        # Handle fail action
         fail_action = self.fail_action_combo.currentText()
-        if fail_action == "Exit Macro":
+        if fail_action == "Ignore":
+            result["output"]["fail"] = "IGNORE"
+        elif fail_action == "Exit Macro":
             result["output"]["fail"] = "EXIT"
         elif fail_action == "Custom Command":
             cmd = self.fail_command_input.text()
@@ -258,6 +304,9 @@ class OutputBlock(MacroBlock):
                 result["output"]["fail"] = {"input": cmd}
         elif fail_action == "Dialog for Command":
             result["output"]["fail"] = "DIALOG"
+        elif fail_action == "Dialog and Wait":
+            result["output"]["fail"] = "DIALOG_WAIT"
+        # Continue is default, no need to add it
         
         return result
 
@@ -305,6 +354,8 @@ class MacroCanvas(QWidget):
                               kwargs.get('timeout', 1000),
                               kwargs.get('fail_action', 'Continue'),
                               kwargs.get('fail_command', ''),
+                              kwargs.get('success_action', 'Continue'),
+                              kwargs.get('success_command', ''),
                               self.accent_color, 
                               self.hover_color, 
                               self.background_color)
@@ -593,24 +644,47 @@ class MacroEditor(QDialog):
                 elif 'output' in step:
                     output_data = step['output']
                     fail_data = output_data.get('fail')
+                    success_data = output_data.get('success')
                     
                     # Determine fail action and fail command
                     fail_action = "Continue"  # default
                     fail_command = ""
                     
-                    if fail_data == "EXIT":
+                    if fail_data == "IGNORE":
+                        fail_action = "Ignore"
+                    elif fail_data == "EXIT":
                         fail_action = "Exit Macro"
                     elif fail_data == "DIALOG":
                         fail_action = "Dialog for Command"
+                    elif fail_data == "DIALOG_WAIT":
+                        fail_action = "Dialog and Wait"
                     elif isinstance(fail_data, dict) and 'input' in fail_data:
                         fail_action = "Custom Command"
                         fail_command = fail_data['input']
+                    
+                    # Determine success action and success command
+                    success_action = "Continue"  # default
+                    success_command = ""
+                    
+                    if success_data == "IGNORE":
+                        success_action = "Ignore"
+                    elif success_data == "EXIT":
+                        success_action = "Exit Macro"
+                    elif success_data == "DIALOG":
+                        success_action = "Dialog for Command"
+                    elif success_data == "DIALOG_WAIT":
+                        success_action = "Dialog and Wait"
+                    elif isinstance(success_data, dict) and 'input' in success_data:
+                        success_action = "Custom Command"
+                        success_command = success_data['input']
                     
                     self.canvas.add_block('output', 
                                         expected=output_data.get('expected', ''),
                                         timeout=output_data.get('timeout', 1000),
                                         fail_action=fail_action,
-                                        fail_command=fail_command)
+                                        fail_command=fail_command,
+                                        success_action=success_action,
+                                        success_command=success_command)
         
         except Exception as e:
             QMessageBox.warning(self, "Load Error", f"Failed to load macro: {e}")
