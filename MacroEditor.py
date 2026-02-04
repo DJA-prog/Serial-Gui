@@ -101,7 +101,11 @@ class InputBlock(MacroBlock):
     
     def __init__(self, parent=None, command: str = "", accent_color: str = "#1E90FF", hover_color: str = "#63B8FF", background_color: str = "#1E1E1E"):
         super().__init__("input", "Send Command", parent, accent_color, hover_color, background_color)
-        self.command_input.setText(command)
+        try:
+            if hasattr(self, 'command_input') and self.command_input is not None:
+                self.command_input.setText(command)
+        except Exception as e:
+            print(f"InputBlock initialization error: {e}")
     
     def setup_block_content(self, layout: QHBoxLayout):
         layout_last = QVBoxLayout()
@@ -116,7 +120,11 @@ class InputBlock(MacroBlock):
         layout.addLayout(layout_last)
     
     def to_dict(self) -> Dict[str, Any]:
-        return {"input": self.command_input.text()}
+        try:
+            return {"input": self.command_input.text() if hasattr(self, 'command_input') and self.command_input else ""}
+        except Exception as e:
+            print(f"Error in InputBlock.to_dict: {e}")
+            return {"input": ""}
 
 
 class DelayBlock(MacroBlock):
@@ -124,7 +132,11 @@ class DelayBlock(MacroBlock):
     
     def __init__(self, parent=None, delay_ms: int = 1000, accent_color: str = "#1E90FF", hover_color: str = "#63B8FF", background_color: str = "#1E1E1E"):
         super().__init__("delay", "Delay", parent, accent_color, hover_color, background_color)
-        self.delay_spinbox.setValue(delay_ms)
+        try:
+            if hasattr(self, 'delay_spinbox') and self.delay_spinbox is not None:
+                self.delay_spinbox.setValue(delay_ms)
+        except Exception as e:
+            print(f"DelayBlock initialization error: {e}")
     
     def setup_block_content(self, layout: QHBoxLayout):
         layout_last = QVBoxLayout()
@@ -144,7 +156,11 @@ class DelayBlock(MacroBlock):
         layout.addLayout(layout_last)
     
     def to_dict(self) -> Dict[str, Any]:
-        return {"delay": self.delay_spinbox.value()}
+        try:
+            return {"delay": self.delay_spinbox.value() if hasattr(self, 'delay_spinbox') and self.delay_spinbox else 1000}
+        except Exception as e:
+            print(f"Error in DelayBlock.to_dict: {e}")
+            return {"delay": 1000}
 
 
 class DialogWaitBlock(MacroBlock):
@@ -152,7 +168,11 @@ class DialogWaitBlock(MacroBlock):
     
     def __init__(self, parent=None, message: str = "", accent_color: str = "#1E90FF", hover_color: str = "#63B8FF", background_color: str = "#1E1E1E"):
         super().__init__("dialog_wait", "Dialog Wait", parent, accent_color, hover_color, background_color)
-        self.message_input.setText(message)
+        try:
+            if hasattr(self, 'message_input') and self.message_input is not None:
+                self.message_input.setText(message)
+        except Exception as e:
+            print(f"DialogWaitBlock initialization error: {e}")
     
     def setup_block_content(self, layout: QHBoxLayout):
         layout_last = QVBoxLayout()
@@ -178,7 +198,11 @@ class DialogWaitBlock(MacroBlock):
         layout.addLayout(layout_last)
     
     def to_dict(self) -> Dict[str, Any]:
-        return {"dialog_wait": {"message": self.message_input.text()}}
+        try:
+            return {"dialog_wait": {"message": self.message_input.text() if hasattr(self, 'message_input') and self.message_input else ""}}
+        except Exception as e:
+            print(f"Error in DialogWaitBlock.to_dict: {e}")
+            return {"dialog_wait": {"message": ""}}
 
 
 class OutputBlock(MacroBlock):
@@ -188,19 +212,38 @@ class OutputBlock(MacroBlock):
                  fail_action: str = "Continue", fail_command: str = "",
                  success_action: str = "Continue", success_command: str = "",
                  accent_color: str = "#1E90FF", hover_color: str = "#63B8FF", background_color: str = "#1E1E1E"):
+        # Initialize flag to prevent signal handling during setup
+        self._initializing = True
+        
         super().__init__("output", "Expect Output", parent, accent_color, hover_color, background_color)
-        self.expected_input.setText(expected)
-        self.timeout_spinbox.setValue(timeout)
-        # Set fail action after widgets are created
-        if fail_action in ["Ignore", "Continue", "Exit Macro", "Custom Command", "Dialog for Command", "Dialog and Wait"]:
-            self.fail_action_combo.setCurrentText(fail_action)
-        if fail_command:
-            self.fail_command_input.setText(fail_command)
-        # Set success action
-        if success_action in ["Ignore", "Continue", "Exit Macro", "Custom Command", "Dialog for Command", "Dialog and Wait"]:
-            self.success_action_combo.setCurrentText(success_action)
-        if success_command:
-            self.success_command_input.setText(success_command)
+        
+        # Set values after all widgets are created
+        try:
+            if hasattr(self, 'expected_input') and self.expected_input is not None:
+                self.expected_input.setText(expected)
+            if hasattr(self, 'timeout_spinbox') and self.timeout_spinbox is not None:
+                self.timeout_spinbox.setValue(timeout)
+            
+            # Set fail action after widgets are created
+            if hasattr(self, 'fail_action_combo') and self.fail_action_combo is not None:
+                if fail_action in ["Ignore", "Continue", "Exit Macro", "Custom Command", "Dialog for Command", "Dialog and Wait"]:
+                    self.fail_action_combo.setCurrentText(fail_action)
+            
+            if hasattr(self, 'fail_command_input') and self.fail_command_input is not None and fail_command:
+                self.fail_command_input.setText(fail_command)
+            
+            # Set success action
+            if hasattr(self, 'success_action_combo') and self.success_action_combo is not None:
+                if success_action in ["Ignore", "Continue", "Exit Macro", "Custom Command", "Dialog for Command", "Dialog and Wait"]:
+                    self.success_action_combo.setCurrentText(success_action)
+            
+            if hasattr(self, 'success_command_input') and self.success_command_input is not None and success_command:
+                self.success_command_input.setText(success_command)
+        except Exception as e:
+            print(f"OutputBlock initialization error: {e}")
+        finally:
+            # Initialization complete, enable signal handling
+            self._initializing = False
     
     def setup_block_content(self, layout: QHBoxLayout):
         layout_last = QVBoxLayout()
@@ -259,56 +302,95 @@ class OutputBlock(MacroBlock):
 
         layout.addLayout(layout_last)
         
-        self.success_action_combo.currentTextChanged.connect(self.on_success_action_changed)
-        self.fail_action_combo.currentTextChanged.connect(self.on_fail_action_changed)
+        # Connect signals AFTER all widgets are created
+        try:
+            if hasattr(self, 'success_action_combo') and self.success_action_combo is not None:
+                self.success_action_combo.currentTextChanged.connect(self.on_success_action_changed)
+            if hasattr(self, 'fail_action_combo') and self.fail_action_combo is not None:
+                self.fail_action_combo.currentTextChanged.connect(self.on_fail_action_changed)
+        except Exception as e:
+            print(f"OutputBlock signal connection error: {e}")
     
     def on_success_action_changed(self, text: str):
-        self.success_command_input.setVisible(text == "Custom Command")
+        """Handle success action combo box changes with error protection"""
+        # Skip if still initializing
+        if hasattr(self, '_initializing') and self._initializing:
+            return
+        
+        try:
+            if hasattr(self, 'success_command_input') and self.success_command_input is not None:
+                self.success_command_input.setVisible(text == "Custom Command")
+        except Exception as e:
+            print(f"Error in on_success_action_changed: {e}")
     
     def on_fail_action_changed(self, text: str):
-        self.fail_command_input.setVisible(text == "Custom Command")
+        """Handle fail action combo box changes with error protection"""
+        # Skip if still initializing
+        if hasattr(self, '_initializing') and self._initializing:
+            return
+        
+        try:
+            if hasattr(self, 'fail_command_input') and self.fail_command_input is not None:
+                self.fail_command_input.setVisible(text == "Custom Command")
+        except Exception as e:
+            print(f"Error in on_fail_action_changed: {e}")
     
     def to_dict(self) -> Dict[str, Any]:
-        result: Dict[str, Any] = {
-            "output": {
-                "expected": self.expected_input.text(),
-                "timeout": self.timeout_spinbox.value()
+        """Convert block to dictionary with error handling"""
+        try:
+            result: Dict[str, Any] = {
+                "output": {
+                    "expected": self.expected_input.text() if hasattr(self, 'expected_input') and self.expected_input else "",
+                    "timeout": self.timeout_spinbox.value() if hasattr(self, 'timeout_spinbox') and self.timeout_spinbox else 1000
+                }
             }
-        }
-        
-        # Handle success action
-        success_action = self.success_action_combo.currentText()
-        if success_action == "Ignore":
-            result["output"]["success"] = "IGNORE"
-        elif success_action == "Exit Macro":
-            result["output"]["success"] = "EXIT"
-        elif success_action == "Custom Command":
-            cmd = self.success_command_input.text()
-            if cmd:
-                result["output"]["success"] = {"input": cmd}
-        elif success_action == "Dialog for Command":
-            result["output"]["success"] = "DIALOG"
-        elif success_action == "Dialog and Wait":
-            result["output"]["success"] = "DIALOG_WAIT"
-        # Continue is default, no need to add it
-        
-        # Handle fail action
-        fail_action = self.fail_action_combo.currentText()
-        if fail_action == "Ignore":
-            result["output"]["fail"] = "IGNORE"
-        elif fail_action == "Exit Macro":
-            result["output"]["fail"] = "EXIT"
-        elif fail_action == "Custom Command":
-            cmd = self.fail_command_input.text()
-            if cmd:
-                result["output"]["fail"] = {"input": cmd}
-        elif fail_action == "Dialog for Command":
-            result["output"]["fail"] = "DIALOG"
-        elif fail_action == "Dialog and Wait":
-            result["output"]["fail"] = "DIALOG_WAIT"
-        # Continue is default, no need to add it
-        
-        return result
+            
+            # Handle success action
+            if hasattr(self, 'success_action_combo') and self.success_action_combo is not None:
+                success_action = self.success_action_combo.currentText()
+                if success_action == "Ignore":
+                    result["output"]["success"] = "IGNORE"
+                elif success_action == "Exit Macro":
+                    result["output"]["success"] = "EXIT"
+                elif success_action == "Custom Command":
+                    if hasattr(self, 'success_command_input') and self.success_command_input is not None:
+                        cmd = self.success_command_input.text()
+                        if cmd:
+                            result["output"]["success"] = {"input": cmd}
+                elif success_action == "Dialog for Command":
+                    result["output"]["success"] = "DIALOG"
+                elif success_action == "Dialog and Wait":
+                    result["output"]["success"] = "DIALOG_WAIT"
+                # Continue is default, no need to add it
+            
+            # Handle fail action
+            if hasattr(self, 'fail_action_combo') and self.fail_action_combo is not None:
+                fail_action = self.fail_action_combo.currentText()
+                if fail_action == "Ignore":
+                    result["output"]["fail"] = "IGNORE"
+                elif fail_action == "Exit Macro":
+                    result["output"]["fail"] = "EXIT"
+                elif fail_action == "Custom Command":
+                    if hasattr(self, 'fail_command_input') and self.fail_command_input is not None:
+                        cmd = self.fail_command_input.text()
+                        if cmd:
+                            result["output"]["fail"] = {"input": cmd}
+                elif fail_action == "Dialog for Command":
+                    result["output"]["fail"] = "DIALOG"
+                elif fail_action == "Dialog and Wait":
+                    result["output"]["fail"] = "DIALOG_WAIT"
+                # Continue is default, no need to add it
+            
+            return result
+        except Exception as e:
+            print(f"Error in OutputBlock.to_dict: {e}")
+            # Return minimal valid structure
+            return {
+                "output": {
+                    "expected": "",
+                    "timeout": 1000
+                }
+            }
 
 
 class MacroCanvas(QWidget):

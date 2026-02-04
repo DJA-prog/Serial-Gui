@@ -61,7 +61,29 @@
 - **Improved button sizing** - Buttons use default heights for consistency
 - **Clean list displays** - Removed alternating row colors for better theme compatibility
 
-### 📚 Enhanced Documentation
+### � Bug Fixes and Stability Improvements
+
+#### Macro Editor Crash Prevention
+- **Initialization protection** - Added flag to prevent signal handling during widget creation
+- **Defensive widget access** - All widget accesses now verify existence before use
+- **Comprehensive error handling** - Try-except blocks added to all critical operations
+- **Signal handler safety** - Handlers check initialization state before execution
+- **Graceful degradation** - Errors are logged and app continues with fallback values
+
+#### Cross-Platform Compatibility
+- **Windows build stability** - Prevents crashes on systems with different PyQt5 versions
+- **DPI scaling protection** - Handles various screen resolutions and DPI settings
+- **Error logging** - Debug messages help identify system-specific issues
+- **Robust serialization** - YAML operations protected with error recovery
+
+#### Protected Components
+- **OutputBlock** - Full error handling for success/fail action changes
+- **InputBlock** - Protected initialization and serialization
+- **DelayBlock** - Safe value setting and retrieval
+- **DialogWaitBlock** - Error-tolerant message handling
+- **All signal handlers** - Protected against race conditions and null references
+
+### �📚 Enhanced Documentation
 - **THEMES.md reference** - Complete guide to available themes and customization
 - **Color specifications** - Hex codes and usage guidelines for all themes
 - **Theme descriptions** - Detailed explanations of each theme's purpose and best use cases
@@ -99,6 +121,14 @@
 ## Known Issues
 
 - None reported at this time
+
+## Bug Fixes
+
+This release includes important stability improvements:
+- **Fixed macro editor crashes** on some Windows systems when changing OutputBlock dropdown options
+- **Resolved race conditions** in widget initialization that could cause crashes
+- **Improved error recovery** - Application continues gracefully when encountering widget errors
+- **Enhanced debugging** - Error messages now logged to console for troubleshooting
 
 ## System Requirements
 
