@@ -278,6 +278,11 @@ class MainWindow(QMainWindow):
         self.serial_reader_thread: Optional[SerialReaderThread] = None
         self.available_ports = self.get_serial_ports()
         
+        # Track disconnection due to focus loss for auto-reconnect
+        self.disconnected_by_focus_loss = False
+        self.reconnect_port: Optional[str] = None
+        self.reconnect_baud_rate: Optional[int] = None
+        
         # Macro session buffer - only active during macro execution
         self.macro_session_active = False
         self.macro_session_buffer: List[str] = []  # Dedicated buffer for macro OutputBlock checking
@@ -2423,7 +2428,8 @@ class MainWindow(QMainWindow):
                 self.connect_button.setToolTip(
                     "Disconnect from serial port\n\n"
                     "! Warning: 'Disconnect On Inactive' is enabled.\n"
-                    "Serial port will auto-disconnect when app loses focus."
+                    "Serial port will auto-disconnect when app loses focus\n"
+                    "and auto-reconnect when app regains focus."
                 )
             else:
                 self.connect_button.setText("Disconnect")
@@ -2434,7 +2440,8 @@ class MainWindow(QMainWindow):
                 self.connect_button.setToolTip(
                     "Connect to the selected serial port\n\n"
                     "! Warning: 'Disconnect On Inactive' is enabled.\n"
-                    "Serial port will auto-disconnect when app loses focus."
+                    "Serial port will auto-disconnect when app loses focus\n"
+                    "and auto-reconnect when app regains focus."
                 )
             else:
                 self.connect_button.setText("Connect")
@@ -2442,18 +2449,44 @@ class MainWindow(QMainWindow):
     
     def on_window_activated(self) -> None:
         """Called when the application window becomes active (focused)"""
-        # Add any other actions you want when window gains focus
-        # For example: resume certain activities, update data, etc.
-        pass
+        disconnect_on_inactive = self.settings.get("general", {}).get("disconnect_on_inactive", False)
+        
+        # Auto-reconnect if we disconnected due to focus loss
+        if disconnect_on_inactive and self.disconnected_by_focus_loss and self.reconnect_port:
+            self.disconnected_by_focus_loss = False
+            # Set the port and baud rate in the UI
+            port_index = self.port_combo.findText(self.reconnect_port)
+            if port_index >= 0:
+                self.port_combo.setCurrentIndex(port_index)
+            
+            if self.reconnect_baud_rate:
+                baud_index = self.baud_rate_combo.findText(str(self.reconnect_baud_rate))
+                if baud_index >= 0:
+                    self.baud_rate_combo.setCurrentIndex(baud_index)
+                elif self.reconnect_baud_rate == self.settings.get("general", {}).get("custom-baudrate", 115200):
+                    # Use custom baud rate
+                    custom_index = self.baud_rate_combo.findText("Custom")
+                    if custom_index >= 0:
+                        self.baud_rate_combo.setCurrentIndex(custom_index)
+            
+            # Reconnect
+            self.connect_serial()
+            self.reconnect_port = None
+            self.reconnect_baud_rate = None
     
     def on_window_deactivated(self) -> None:
         """Called when the application window becomes inactive (unfocused)"""
-        # Disconnect serial if setting is enabled
         disconnect_on_inactive = self.settings.get("general", {}).get("disconnect_on_inactive", False)
+        
+        # Disconnect serial if setting is enabled and save connection info for reconnect
         if disconnect_on_inactive and self.serial_port and self.serial_port.is_open:
+            # Save connection details for auto-reconnect
+            self.reconnect_port = self.serial_port.port
+            self.reconnect_baud_rate = self.serial_port.baudrate
+            self.disconnected_by_focus_loss = True
+            
+            # Disconnect
             self.disconnect_serial()
-        # Add any other actions you want when window loses focus
-        # For example: pause refreshes, save state, etc.
 
     def closeEvent(self, a0: QCloseEvent | None) -> None:  # type: ignore[override]
         if a0 is not None:
