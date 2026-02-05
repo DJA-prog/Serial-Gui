@@ -1170,72 +1170,57 @@ class MainWindow(QMainWindow):
 
         auto_clear_item = QTableWidgetItem(str(settings.get("auto_clear_output", False)))
         self.settings_table.setItem(0, 1, auto_clear_item)
-        # Row 1: accent_color (color)
-        accent_color_item = QTableWidgetItem(str(settings.get("accent_color", "#1E90FF")))
-        self.settings_table.setItem(1, 1, accent_color_item)
-        # Row 2: hover_color (color)
-        hover_color_item = QTableWidgetItem(str(settings.get("hover_color", "#63B8FF")))
-        self.settings_table.setItem(2, 1, hover_color_item)
-        # Row 3: font_color (color)
-        font_color_item = QTableWidgetItem(str(settings.get("font_color", "#FFFFFF")))
-        self.settings_table.setItem(3, 1, font_color_item)
-        # Row 4: background_color (color)
-        background_color_item = QTableWidgetItem(str(settings.get("background_color", "#121212")))
-        self.settings_table.setItem(4, 1, background_color_item)
-        # Row 5: DTR (bool)
+        # Row 1: DTR (bool)
         dtr_item = QTableWidgetItem(str(settings.get("dtr_state", False)))
-        self.settings_table.setItem(5, 1, dtr_item)
-        # Row 6: RTS (bool)
+        self.settings_table.setItem(1, 1, dtr_item)
+        # Row 2: RTS (bool)
         rts_item = QTableWidgetItem(str(settings.get("rts_state", False)))
-        self.settings_table.setItem(6, 1, rts_item)
-        # Row 7: maximized (bool)
+        self.settings_table.setItem(2, 1, rts_item)
+        # Row 3: maximized (bool)
         maximized_item = QTableWidgetItem(str(settings.get("maximized", False)))
-        self.settings_table.setItem(7, 1, maximized_item)
-        # Row 8: tx line ending
+        self.settings_table.setItem(3, 1, maximized_item)
+        # Row 4: tx line ending
         tx_line_ending_item = QTableWidgetItem(str(settings.get("tx_line_ending", "CRLN")))
-        self.settings_table.setItem(8, 1, tx_line_ending_item)
-        # Row 9: Data bits: 8,7,6,5
+        self.settings_table.setItem(4, 1, tx_line_ending_item)
+        # Row 5: Data bits: 8,7,6,5
         data_bits = QTableWidgetItem(str(settings.get("data_bits", "8")))
-        self.settings_table.setItem(9, 1, data_bits)
-        # Row 10: parity: None, Even, Odd, Space, Mark
+        self.settings_table.setItem(5, 1, data_bits)
+        # Row 6: parity: None, Even, Odd, Space, Mark
         parity = QTableWidgetItem(str(settings.get("parity", "None")))
-        self.settings_table.setItem(10, 1, parity)
-        # Row 11: Stop bits: 1, 2
+        self.settings_table.setItem(6, 1, parity)
+        # Row 7: Stop bits: 1, 2
         stop_bits = QTableWidgetItem(str(settings.get("stop_bits", "1")))
-        self.settings_table.setItem(11, 1, stop_bits)
-        # Row 12: Flow Control: None, Hardware, Software
+        self.settings_table.setItem(7, 1, stop_bits)
+        # Row 8: Flow Control: None, Hardware, Software
         flow_control = QTableWidgetItem(str(settings.get("flow_control", "None")))
-        self.settings_table.setItem(12, 1, flow_control)
-        # Row 13: Open mode: Read/Write, Read only, Write only
+        self.settings_table.setItem(8, 1, flow_control)
+        # Row 9: Open mode: Read/Write, Read only, Write only
         open_mode = QTableWidgetItem(str(settings.get("open_mode", "Read/Write")))
-        self.settings_table.setItem(13, 1, open_mode)
-        # Row 14: reveal_hidden_char (bool)
+        self.settings_table.setItem(9, 1, open_mode)
+        # Row 10: reveal_hidden_char (bool)
         reveal_hidden_char_item = QTableWidgetItem(str(settings.get("reveal_hidden_char", False)))
-        self.settings_table.setItem(14, 1, reveal_hidden_char_item)
-        # Row 15: max_output_lines (int)
+        self.settings_table.setItem(10, 1, reveal_hidden_char_item)
+        # Row 11: max_output_lines (int)
         max_output_lines_item = QTableWidgetItem(str(settings.get("max_output_lines", 10000)))
-        self.settings_table.setItem(15, 1, max_output_lines_item)
-        # Row 16: custom-baudrate (int)
+        self.settings_table.setItem(11, 1, max_output_lines_item)
+        # Row 12: custom-baudrate (int)
         custom_baud_rate_item = QTableWidgetItem(str(settings.get("custom-baudrate", 115200)))
-        self.settings_table.setItem(16, 1, custom_baud_rate_item)
-        # Row 17: enable_tooltips (bool)
+        self.settings_table.setItem(12, 1, custom_baud_rate_item)
+        # Row 13: enable_tooltips (bool)
         enable_tooltips_item = QTableWidgetItem(str(settings.get("enable_tooltips", True)))
-        self.settings_table.setItem(17, 1, enable_tooltips_item)
-        # Row 18: filter_empty_lines (bool)
+        self.settings_table.setItem(13, 1, enable_tooltips_item)
+        # Row 14: filter_empty_lines (bool)
         filter_empty_lines_item = QTableWidgetItem(str(settings.get("filter_empty_lines", False)))
-        self.settings_table.setItem(18, 1, filter_empty_lines_item)
-        # Row 19: custom_line_filter (string)
+        self.settings_table.setItem(14, 1, filter_empty_lines_item)
+        # Row 15: custom_line_filter (string)
         custom_line_filter_item = QTableWidgetItem(str(settings.get("custom_line_filter", "")))
-        self.settings_table.setItem(19, 1, custom_line_filter_item)
-        # Row 20: show_flow_indicators (bool)
+        self.settings_table.setItem(15, 1, custom_line_filter_item)
+        # Row 16: show_flow_indicators (bool)
         show_flow_indicators_item = QTableWidgetItem(str(settings.get("show_flow_indicators", True)))
-        self.settings_table.setItem(20, 1, show_flow_indicators_item)
-        # Row 21: disconnect_on_inactive (bool)
+        self.settings_table.setItem(16, 1, show_flow_indicators_item)
+        # Row 17: disconnect_on_inactive (bool)
         disconnect_on_inactive_item = QTableWidgetItem(str(settings.get("disconnect_on_inactive", False)))
-        self.settings_table.setItem(21, 1, disconnect_on_inactive_item)
-        # Row 22: app_version (read-only string)
-        app_version_item = QTableWidgetItem(str(settings.get("app_version", __version__)))
-        self.settings_table.setItem(22, 1, app_version_item)
+        self.settings_table.setItem(17, 1, disconnect_on_inactive_item)
 
     def tab_settings(self) -> None:
 
@@ -1244,8 +1229,8 @@ class MainWindow(QMainWindow):
 
         # Settings table
         self.settings_table = QTableWidget()
-        self.settings_table.setToolTip("Double-click a value to edit. For colors, a color picker will appear.")
-        self.settings_table.setRowCount(23)
+        self.settings_table.setToolTip("Double-click a value to edit.")
+        self.settings_table.setRowCount(18)
         self.settings_table.setColumnCount(2)
         self.settings_table.setHorizontalHeaderLabels(["Setting", "Value"])
         v_header = self.settings_table.verticalHeader()
@@ -1262,28 +1247,23 @@ class MainWindow(QMainWindow):
         settings = self.settings.get("general", {})
         
         self.settings_table.setItem(0, 0, QTableWidgetItem("Auto Clear Output"))
-        self.settings_table.setItem(1, 0, QTableWidgetItem("Accent Color"))
-        self.settings_table.setItem(2, 0, QTableWidgetItem("Hover Color"))
-        self.settings_table.setItem(3, 0, QTableWidgetItem("Font Color"))
-        self.settings_table.setItem(4, 0, QTableWidgetItem("Background Color"))
-        self.settings_table.setItem(5, 0, QTableWidgetItem("DTR"))
-        self.settings_table.setItem(6, 0, QTableWidgetItem("RTS"))
-        self.settings_table.setItem(7, 0, QTableWidgetItem("Maximized"))
-        self.settings_table.setItem(8, 0, QTableWidgetItem("Tx line Ending"))
-        self.settings_table.setItem(9, 0, QTableWidgetItem("Data Bits"))
-        self.settings_table.setItem(10, 0, QTableWidgetItem("Parity"))
-        self.settings_table.setItem(11, 0, QTableWidgetItem("Stop Bits"))
-        self.settings_table.setItem(12, 0, QTableWidgetItem("Flow Control"))
-        self.settings_table.setItem(13, 0, QTableWidgetItem("Open Mode"))
-        self.settings_table.setItem(14, 0, QTableWidgetItem("Reveal Hidden Char"))
-        self.settings_table.setItem(15, 0, QTableWidgetItem("Max Output Lines"))
-        self.settings_table.setItem(16, 0, QTableWidgetItem("Custom Baud Rate"))
-        self.settings_table.setItem(17, 0, QTableWidgetItem("Enable Tooltips"))
-        self.settings_table.setItem(18, 0, QTableWidgetItem("Filter Empty Lines"))
-        self.settings_table.setItem(19, 0, QTableWidgetItem("Custom Line Filter"))
-        self.settings_table.setItem(20, 0, QTableWidgetItem("Show Flow Indicators"))
-        self.settings_table.setItem(21, 0, QTableWidgetItem("Disconnect On Inactive"))
-        self.settings_table.setItem(22, 0, QTableWidgetItem("App Version"))
+        self.settings_table.setItem(1, 0, QTableWidgetItem("DTR"))
+        self.settings_table.setItem(2, 0, QTableWidgetItem("RTS"))
+        self.settings_table.setItem(3, 0, QTableWidgetItem("Maximized"))
+        self.settings_table.setItem(4, 0, QTableWidgetItem("Tx line Ending"))
+        self.settings_table.setItem(5, 0, QTableWidgetItem("Data Bits"))
+        self.settings_table.setItem(6, 0, QTableWidgetItem("Parity"))
+        self.settings_table.setItem(7, 0, QTableWidgetItem("Stop Bits"))
+        self.settings_table.setItem(8, 0, QTableWidgetItem("Flow Control"))
+        self.settings_table.setItem(9, 0, QTableWidgetItem("Open Mode"))
+        self.settings_table.setItem(10, 0, QTableWidgetItem("Reveal Hidden Char"))
+        self.settings_table.setItem(11, 0, QTableWidgetItem("Max Output Lines"))
+        self.settings_table.setItem(12, 0, QTableWidgetItem("Custom Baud Rate"))
+        self.settings_table.setItem(13, 0, QTableWidgetItem("Enable Tooltips"))
+        self.settings_table.setItem(14, 0, QTableWidgetItem("Filter Empty Lines"))
+        self.settings_table.setItem(15, 0, QTableWidgetItem("Custom Line Filter"))
+        self.settings_table.setItem(16, 0, QTableWidgetItem("Show Flow Indicators"))
+        self.settings_table.setItem(17, 0, QTableWidgetItem("Disconnect On Inactive"))
 
         self.tab_settings_set()
 
@@ -1295,10 +1275,6 @@ class MainWindow(QMainWindow):
             if item is None:
                 return
             key = item.text()
-            
-            # App Version is read-only
-            if key == "App Version":
-                return
             
             general = self.settings["general"]
 
@@ -1341,23 +1317,6 @@ class MainWindow(QMainWindow):
                     if self.serial_port and self.serial_port.is_open:
                         self.serial_port.rts = new_value
                 self.save_settings()
-
-            # Color options
-            elif key in ("Accent Color", "Hover Color", "Font Color", "Background Color"):
-                color = QColorDialog.getColor()
-                if color.isValid():
-                    hex_color = color.name()
-                    self.settings_table.setItem(row, 1, QTableWidgetItem(hex_color))
-                    if key == "Accent Color":
-                        general["accent_color"] = hex_color
-                    elif key == "Hover Color":
-                        general["hover_color"] = hex_color
-                    elif key == "Font Color":
-                        general["font_color"] = hex_color
-                    elif key == "Background Color":
-                        general["background_color"] = hex_color
-                    self.save_settings()
-                    self.set_style()
 
             # Drop-down / list options
             elif key == "Tx line Ending":

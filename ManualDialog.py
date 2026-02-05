@@ -146,11 +146,6 @@ class ManualDialog(QDialog):
 <li><b>Disconnect On Inactive:</b> Auto-disconnect when app loses focus, auto-reconnect when regaining focus (! warning on Connect button when enabled)</li>
 </ul>
 
-<h3>Information:</h3>
-<ul>
-<li><b>App Version:</b> Version that last edited settings (read-only)</li>
-</ul>
-
 <h3>Configuration Directory:</h3>
 <p>Click "Open Configurations Directory" to access:</p>
 <ul>
