@@ -219,3 +219,5 @@ MIT License
 ## Acknowledgments
 
 Inspired by CuteCom and Arduino IDE Serial Monitor. This project is not affiliated with these applications. All trademarks are property of their respective owners.
+
+<a href="https://www.flaticon.com/free-icons/computer" title="computer icons">Computer icons created by Freepik - Flaticon</a>
