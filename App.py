@@ -245,7 +245,8 @@ class MainWindow(QMainWindow):
                 'last-baudrate': 115200,
                 'custom-baudrate': 115200,
                 'filter_empty_lines': False,
-                'custom_line_filter': ''
+                'custom_line_filter': '',
+                'show_flow_indicators': True
             }
         }
         self.default_settings = self.settings.copy()
@@ -1199,6 +1200,9 @@ class MainWindow(QMainWindow):
         # Row 19: custom_line_filter (string)
         custom_line_filter_item = QTableWidgetItem(str(settings.get("custom_line_filter", "")))
         self.settings_table.setItem(19, 1, custom_line_filter_item)
+        # Row 20: show_flow_indicators (bool)
+        show_flow_indicators_item = QTableWidgetItem(str(settings.get("show_flow_indicators", True)))
+        self.settings_table.setItem(20, 1, show_flow_indicators_item)
 
     def tab_settings(self) -> None:
 
@@ -1208,7 +1212,7 @@ class MainWindow(QMainWindow):
         # Settings table
         self.settings_table = QTableWidget()
         self.settings_table.setToolTip("Double-click a value to edit. For colors, a color picker will appear.")
-        self.settings_table.setRowCount(20)
+        self.settings_table.setRowCount(21)
         self.settings_table.setColumnCount(2)
         self.settings_table.setHorizontalHeaderLabels(["Setting", "Value"])
         v_header = self.settings_table.verticalHeader()
@@ -1244,6 +1248,7 @@ class MainWindow(QMainWindow):
         self.settings_table.setItem(17, 0, QTableWidgetItem("Enable Tooltips"))
         self.settings_table.setItem(18, 0, QTableWidgetItem("Filter Empty Lines"))
         self.settings_table.setItem(19, 0, QTableWidgetItem("Custom Line Filter"))
+        self.settings_table.setItem(20, 0, QTableWidgetItem("Show Flow Indicators"))
 
         self.tab_settings_set()
 
@@ -1258,7 +1263,7 @@ class MainWindow(QMainWindow):
             general = self.settings["general"]
 
             # Boolean options
-            if key in ("Auto Clear Output", "Maximized", "Reveal Hidden Char", "DTR", "RTS", "Enable Tooltips", "Filter Empty Lines"):
+            if key in ("Auto Clear Output", "Maximized", "Reveal Hidden Char", "DTR", "RTS", "Enable Tooltips", "Filter Empty Lines", "Show Flow Indicators"):
                 value_item = self.settings_table.item(row, 1)
                 if value_item is None:
                     return
@@ -1274,6 +1279,8 @@ class MainWindow(QMainWindow):
                     general["reveal_hidden_char"] = new_value
                 elif key == "Filter Empty Lines":
                     general["filter_empty_lines"] = new_value
+                elif key == "Show Flow Indicators":
+                    general["show_flow_indicators"] = new_value
                 elif key == "DTR":
                     general["dtr_state"] = new_value
                     # Update serial port if connected
@@ -2288,11 +2295,20 @@ class MainWindow(QMainWindow):
             if command:
                 self.save_command(command)  # Save command to history
                 self.serial_port.write((command + str(tx_value)).encode())
-                self.print_to_display(f"< {command}")
+                # Show flow indicator if enabled
+                show_flow = self.settings.get("general", {}).get("show_flow_indicators", True)
+                if show_flow:
+                    self.print_to_display(f"< {command}")
+                else:
+                    self.print_to_display(command)
             else:
                 # Send just the line ending when input is empty
                 self.serial_port.write(tx_value.encode())
-                self.print_to_display("<")
+                # Only display empty line indicator if filter is disabled and flow indicators enabled
+                filter_empty = self.settings.get("general", {}).get("filter_empty_lines", False)
+                show_flow = self.settings.get("general", {}).get("show_flow_indicators", True)
+                if not filter_empty and show_flow:
+                    self.print_to_display("<")
             
             self.command_input.clear()
 
@@ -2323,15 +2339,22 @@ class MainWindow(QMainWindow):
         
         # Only display if there are non-empty lines left after filtering
         if filtered_lines:
-            # Remove trailing empty strings from split
-            while filtered_lines and not filtered_lines[-1].strip():
-                filtered_lines.pop()
+            # Remove trailing empty strings from split (only if filter is enabled)
+            if filter_empty:
+                while filtered_lines and not filtered_lines[-1].strip():
+                    filtered_lines.pop()
             
             # Only display if we still have content
             if filtered_lines or not filter_empty:
                 filtered_data = '\n'.join(filtered_lines)
-                if filtered_data.strip():  # Only display if there's actual content
-                    self.print_to_display('> ' + filtered_data)
+                # Only check for content if filter is enabled, otherwise show all data including blanks
+                if not filter_empty or filtered_data.strip():
+                    # Show flow indicator if enabled
+                    show_flow = self.settings.get("general", {}).get("show_flow_indicators", True)
+                    if show_flow:
+                        self.print_to_display('> ' + filtered_data)
+                    else:
+                        self.print_to_display(filtered_data)
         
         # Add to macro session buffer if a macro is running (unfiltered)
         if self.macro_session_active:
