@@ -30,8 +30,20 @@ from PyQt5.QtWidgets import (
     QSpinBox, QTabWidget, QFileDialog, QMenu, QAction, QScrollArea
 )
 from PyQt5.QtCore import QTimer, Qt, QPoint, pyqtSignal, pyqtSlot, QThread, QEvent
-from PyQt5.QtGui import QMouseEvent, QCloseEvent, QKeyEvent
+from PyQt5.QtGui import QMouseEvent, QCloseEvent, QKeyEvent, QIcon
 from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QColorDialog, QAbstractItemView
+
+def get_resource_path(relative_path: str) -> str:
+    """
+    Get absolute path to resource, works for dev and for PyInstaller
+    """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS  # type: ignore[attr-defined]
+    except Exception:
+        base_path = os.path.abspath(".")
+    
+    return os.path.join(base_path, relative_path)
 
 def get_config_dir(app_name: str) -> Path:
     """
@@ -202,6 +214,11 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Serial Communication Monitor")
         self.resize(800, 600)
+        
+        # Set window icon for taskbar and title bar
+        icon_path = get_resource_path("images/icon.png")
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
 
         self.history = []  # copy so we don't modify the original list
         self.history_index = len(self.history)  # start at "end" (new command)
@@ -2489,6 +2506,12 @@ class MainWindow(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    
+    # Set application icon for taskbar
+    icon_path = get_resource_path("images/icon.png")
+    if os.path.exists(icon_path):
+        app.setWindowIcon(QIcon(icon_path))
+    
     window = MainWindow()
     window.show()
     sys.exit(app.exec_())
