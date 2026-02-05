@@ -1203,6 +1203,9 @@ class MainWindow(QMainWindow):
         # Row 20: show_flow_indicators (bool)
         show_flow_indicators_item = QTableWidgetItem(str(settings.get("show_flow_indicators", True)))
         self.settings_table.setItem(20, 1, show_flow_indicators_item)
+        # Row 21: app_version (read-only string)
+        app_version_item = QTableWidgetItem(str(settings.get("app_version", __version__)))
+        self.settings_table.setItem(21, 1, app_version_item)
 
     def tab_settings(self) -> None:
 
@@ -1212,7 +1215,7 @@ class MainWindow(QMainWindow):
         # Settings table
         self.settings_table = QTableWidget()
         self.settings_table.setToolTip("Double-click a value to edit. For colors, a color picker will appear.")
-        self.settings_table.setRowCount(21)
+        self.settings_table.setRowCount(22)
         self.settings_table.setColumnCount(2)
         self.settings_table.setHorizontalHeaderLabels(["Setting", "Value"])
         v_header = self.settings_table.verticalHeader()
@@ -1249,6 +1252,7 @@ class MainWindow(QMainWindow):
         self.settings_table.setItem(18, 0, QTableWidgetItem("Filter Empty Lines"))
         self.settings_table.setItem(19, 0, QTableWidgetItem("Custom Line Filter"))
         self.settings_table.setItem(20, 0, QTableWidgetItem("Show Flow Indicators"))
+        self.settings_table.setItem(21, 0, QTableWidgetItem("App Version"))
 
         self.tab_settings_set()
 
@@ -1260,6 +1264,11 @@ class MainWindow(QMainWindow):
             if item is None:
                 return
             key = item.text()
+            
+            # App Version is read-only
+            if key == "App Version":
+                return
+            
             general = self.settings["general"]
 
             # Boolean options
@@ -1571,6 +1580,9 @@ class MainWindow(QMainWindow):
         self.set_style()
 
     def save_settings(self) -> None:
+        # Always update the version to track which app version last edited the settings
+        self.settings['general']['app_version'] = __version__
+        
         settings_file = os.path.join(self.app_configs_path, "settings.yaml")
         try:
             with open(settings_file, "w") as f:
