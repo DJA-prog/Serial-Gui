@@ -65,7 +65,14 @@ class ManualDialog(QDialog):
 <li><b>Input Block (Blue):</b> Send commands to the serial port</li>
 <li><b>Delay Block (Orange):</b> Add delays between commands (0-60000 ms)</li>
 <li><b>Dialog Wait Block (Purple):</b> Pause for user confirmation</li>
-<li><b>Output Block (Green):</b> Wait for expected responses with timeout</li>
+<li><b>Output Block (Green):</b> Wait for expected responses with timeout and substring/full line matching</li>
+</ul>
+
+<h3>Output Block Matching:</h3>
+<ul>
+<li><b>Substring Match (checked):</b> Expected text can appear anywhere in the line</li>
+<li><b>Full Line Match (unchecked):</b> Entire line must match expected text exactly</li>
+<li><b>Timeout:</b> Maximum wait time in milliseconds (0-60000)</li>
 </ul>
 
 <h3>Output Block Actions:</h3>
@@ -106,18 +113,20 @@ class ManualDialog(QDialog):
 """,
 
         "Settings Tab": """<h2>Settings Tab</h2>
-<p>Double-click any value to edit. Colors open a color picker dialog.</p>
+<p>Double-click any value to edit. Boolean values toggle, others show input dialogs.</p>
 
 <h3>Display Settings:</h3>
 <ul>
 <li><b>Auto Clear Output:</b> Clear output when connecting/disconnecting</li>
-<li><b>Accent Color:</b> Primary UI accent color</li>
-<li><b>Hover Color:</b> Hover state color for interactive elements</li>
-<li><b>Font Color:</b> Text color</li>
-<li><b>Background Color:</b> Main background color</li>
 <li><b>Enable Tooltips:</b> Show/hide all tooltips</li>
 <li><b>Reveal Hidden Char:</b> Display whitespace and special characters as symbols</li>
 <li><b>Show Flow Indicators:</b> Display &lt; and &gt; symbols for data direction</li>
+</ul>
+
+<h3>Theme Settings:</h3>
+<ul>
+<li><b>Colors:</b> Use the "Select Theme" button in the About tab to change colors</li>
+<li><b>Custom themes:</b> Edit settings.yaml directly for fine-tuned color control</li>
 </ul>
 
 <h3>Serial Port Settings:</h3>
