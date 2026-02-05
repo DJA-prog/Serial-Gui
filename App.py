@@ -28,7 +28,7 @@ from PyQt5.QtWidgets import (
     QTextEdit, QLineEdit, QLabel, QComboBox, QMessageBox, QTableWidget, QTableWidgetItem, QInputDialog, QDialog, QListWidget, QCheckBox,
     QSpinBox, QTabWidget, QFileDialog, QMenu, QAction, QScrollArea
 )
-from PyQt5.QtCore import QTimer, Qt, QPoint, pyqtSignal, pyqtSlot, QThread
+from PyQt5.QtCore import QTimer, Qt, QPoint, pyqtSignal, pyqtSlot, QThread, QEvent
 from PyQt5.QtGui import QMouseEvent, QCloseEvent, QKeyEvent
 from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QColorDialog, QAbstractItemView
 
@@ -246,7 +246,8 @@ class MainWindow(QMainWindow):
                 'custom-baudrate': 115200,
                 'filter_empty_lines': False,
                 'custom_line_filter': '',
-                'show_flow_indicators': True
+                'show_flow_indicators': True,
+                'disconnect_on_inactive': False
             }
         }
         self.default_settings = self.settings.copy()
@@ -320,6 +321,9 @@ class MainWindow(QMainWindow):
         self.macro_status_signal.connect(self.macro_status_label.setText)
         self.macro_dialog_signal.connect(self._show_macro_dialog)
         self.macro_input_dialog_signal.connect(self._show_macro_input_dialog)
+        
+        # Update connect button appearance based on settings
+        self.update_connect_button_appearance()
 
     def set_style(self) -> None:
         """Apply stylesheet using StyleManager"""
@@ -1203,9 +1207,12 @@ class MainWindow(QMainWindow):
         # Row 20: show_flow_indicators (bool)
         show_flow_indicators_item = QTableWidgetItem(str(settings.get("show_flow_indicators", True)))
         self.settings_table.setItem(20, 1, show_flow_indicators_item)
-        # Row 21: app_version (read-only string)
+        # Row 21: disconnect_on_inactive (bool)
+        disconnect_on_inactive_item = QTableWidgetItem(str(settings.get("disconnect_on_inactive", False)))
+        self.settings_table.setItem(21, 1, disconnect_on_inactive_item)
+        # Row 22: app_version (read-only string)
         app_version_item = QTableWidgetItem(str(settings.get("app_version", __version__)))
-        self.settings_table.setItem(21, 1, app_version_item)
+        self.settings_table.setItem(22, 1, app_version_item)
 
     def tab_settings(self) -> None:
 
@@ -1215,7 +1222,7 @@ class MainWindow(QMainWindow):
         # Settings table
         self.settings_table = QTableWidget()
         self.settings_table.setToolTip("Double-click a value to edit. For colors, a color picker will appear.")
-        self.settings_table.setRowCount(22)
+        self.settings_table.setRowCount(23)
         self.settings_table.setColumnCount(2)
         self.settings_table.setHorizontalHeaderLabels(["Setting", "Value"])
         v_header = self.settings_table.verticalHeader()
@@ -1252,7 +1259,8 @@ class MainWindow(QMainWindow):
         self.settings_table.setItem(18, 0, QTableWidgetItem("Filter Empty Lines"))
         self.settings_table.setItem(19, 0, QTableWidgetItem("Custom Line Filter"))
         self.settings_table.setItem(20, 0, QTableWidgetItem("Show Flow Indicators"))
-        self.settings_table.setItem(21, 0, QTableWidgetItem("App Version"))
+        self.settings_table.setItem(21, 0, QTableWidgetItem("Disconnect On Inactive"))
+        self.settings_table.setItem(22, 0, QTableWidgetItem("App Version"))
 
         self.tab_settings_set()
 
@@ -1272,7 +1280,7 @@ class MainWindow(QMainWindow):
             general = self.settings["general"]
 
             # Boolean options
-            if key in ("Auto Clear Output", "Maximized", "Reveal Hidden Char", "DTR", "RTS", "Enable Tooltips", "Filter Empty Lines", "Show Flow Indicators"):
+            if key in ("Auto Clear Output", "Maximized", "Reveal Hidden Char", "DTR", "RTS", "Enable Tooltips", "Filter Empty Lines", "Show Flow Indicators", "Disconnect On Inactive"):
                 value_item = self.settings_table.item(row, 1)
                 if value_item is None:
                     return
@@ -1290,6 +1298,9 @@ class MainWindow(QMainWindow):
                     general["filter_empty_lines"] = new_value
                 elif key == "Show Flow Indicators":
                     general["show_flow_indicators"] = new_value
+                elif key == "Disconnect On Inactive":
+                    general["disconnect_on_inactive"] = new_value
+                    self.update_connect_button_appearance()
                 elif key == "DTR":
                     general["dtr_state"] = new_value
                     # Update serial port if connected
@@ -2209,7 +2220,7 @@ class MainWindow(QMainWindow):
 
             # Stop refreshing ports when connected
             self.refresh_timer.stop()
-            self.connect_button.setText("Disconnect")
+            self.update_connect_button_appearance()
             self.update_serial_status("green", "Connected")
 
             self.send_button.setDisabled(False)
@@ -2245,7 +2256,7 @@ class MainWindow(QMainWindow):
             self.refresh_timer.start(1000)
 
             # Reset UI elements
-            self.connect_button.setText("Connect")
+            self.update_connect_button_appearance()
             self.update_serial_status("red", "Disconnected")
             self.connected_time_label.setText("Connected Time: 00:00:00")
 
@@ -2389,6 +2400,60 @@ class MainWindow(QMainWindow):
         """Clear the response display."""
         self.response_display.clear()
         self.update_line_count_display()
+
+    def changeEvent(self, event: QEvent) -> None:  # type: ignore[override]
+        """Handle window state changes including focus (activation) changes"""
+        if event.type() == QEvent.Type.ActivationChange:  # type: ignore[attr-defined]
+            if self.isActiveWindow():
+                # Window became active (focused)
+                self.on_window_activated()
+            else:
+                # Window became inactive (unfocused)
+                self.on_window_deactivated()
+        super().changeEvent(event)
+    
+    def update_connect_button_appearance(self) -> None:
+        """Update the connect button text and tooltip based on connection state and settings"""
+        disconnect_on_inactive = self.settings.get("general", {}).get("disconnect_on_inactive", False)
+        is_connected = self.serial_port and self.serial_port.is_open
+        
+        if is_connected:
+            if disconnect_on_inactive:
+                self.connect_button.setText("Disconnect !")
+                self.connect_button.setToolTip(
+                    "Disconnect from serial port\n\n"
+                    "! Warning: 'Disconnect On Inactive' is enabled.\n"
+                    "Serial port will auto-disconnect when app loses focus."
+                )
+            else:
+                self.connect_button.setText("Disconnect")
+                self.connect_button.setToolTip("Disconnect from the serial port")
+        else:
+            if disconnect_on_inactive:
+                self.connect_button.setText("Connect !")
+                self.connect_button.setToolTip(
+                    "Connect to the selected serial port\n\n"
+                    "! Warning: 'Disconnect On Inactive' is enabled.\n"
+                    "Serial port will auto-disconnect when app loses focus."
+                )
+            else:
+                self.connect_button.setText("Connect")
+                self.connect_button.setToolTip("Connect to the selected serial port")
+    
+    def on_window_activated(self) -> None:
+        """Called when the application window becomes active (focused)"""
+        # Add any other actions you want when window gains focus
+        # For example: resume certain activities, update data, etc.
+        pass
+    
+    def on_window_deactivated(self) -> None:
+        """Called when the application window becomes inactive (unfocused)"""
+        # Disconnect serial if setting is enabled
+        disconnect_on_inactive = self.settings.get("general", {}).get("disconnect_on_inactive", False)
+        if disconnect_on_inactive and self.serial_port and self.serial_port.is_open:
+            self.disconnect_serial()
+        # Add any other actions you want when window loses focus
+        # For example: pause refreshes, save state, etc.
 
     def closeEvent(self, a0: QCloseEvent | None) -> None:  # type: ignore[override]
         if a0 is not None:
