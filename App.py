@@ -16,6 +16,7 @@ from MacroEditor import MacroEditor
 from CommandsEditor import CommandsEditor
 from StyleManager import StyleManager
 from ThemesDialog import ThemesDialog
+from ManualDialog import ManualDialog
 
 # Application version
 __version__ = "2.4.0"
@@ -1543,6 +1544,11 @@ class MainWindow(QMainWindow):
         
         about_layout.addStretch()
         
+        # Manual button
+        manual_button = QPushButton("User Manual")
+        manual_button.clicked.connect(self.open_manual_dialog)
+        about_layout.addWidget(manual_button)
+        
         # Themes button at the bottom
         themes_button = QPushButton("Select Theme")
         themes_button.clicked.connect(self.open_themes_dialog)
@@ -1569,6 +1575,11 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"Failed to open configuration directory: {e}")
 
+    def open_manual_dialog(self) -> None:
+        """Opens the user manual dialog"""
+        dialog = ManualDialog(parent=self)
+        dialog.exec_()
+    
     def open_themes_dialog(self) -> None:
         """Opens the themes selection dialog"""
         dialog = ThemesDialog(
