@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QLabel,
     QLineEdit, QScrollArea, QMessageBox, QSpinBox, QComboBox, QFrame,
-    QSizePolicy
+    QSizePolicy, QCheckBox
 )
 from PyQt5.QtCore import Qt, QMimeData, QPoint
 from PyQt5.QtGui import QDrag, QPalette, QColor, QMouseEvent, QDragEnterEvent, QDropEvent
@@ -31,7 +31,7 @@ class MacroBlock(QFrame):
         self.setLineWidth(2)
         self.setMinimumHeight(60)
         # self.setCursor(Qt.CursorShape.OpenHandCursor)
-        self.setMaximumHeight(200)
+        self.setMaximumHeight(240)
         
         # Set background color based on type
         self.set_block_color()
@@ -57,6 +57,9 @@ class MacroBlock(QFrame):
             }}
             QLabel {{
                 border: none;
+                background: transparent;
+            }}
+            QCheckBox {{
                 background: transparent;
             }}
         """)
@@ -211,6 +214,7 @@ class OutputBlock(MacroBlock):
     def __init__(self, parent=None, expected: str = "", timeout: int = 1000, 
                  fail_action: str = "Continue", fail_command: str = "",
                  success_action: str = "Continue", success_command: str = "",
+                 substring_match: bool = True,
                  accent_color: str = "#1E90FF", hover_color: str = "#63B8FF", background_color: str = "#1E1E1E"):
         # Initialize flag to prevent signal handling during setup
         self._initializing = True
@@ -239,6 +243,10 @@ class OutputBlock(MacroBlock):
             
             if hasattr(self, 'success_command_input') and self.success_command_input is not None and success_command:
                 self.success_command_input.setText(success_command)
+            
+            # Set substring match checkbox
+            if hasattr(self, 'substring_match_checkbox') and self.substring_match_checkbox is not None:
+                self.substring_match_checkbox.setChecked(substring_match)
         except Exception as e:
             print(f"OutputBlock initialization error: {e}")
         finally:
@@ -270,6 +278,15 @@ class OutputBlock(MacroBlock):
         self.timeout_spinbox.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
         h_layout2.addWidget(self.timeout_spinbox)
         layout_last.addLayout(h_layout2)
+        
+        # Substring match checkbox
+        h_layout_match = QHBoxLayout()
+        self.substring_match_checkbox = QCheckBox("Substring Match")
+        self.substring_match_checkbox.setChecked(True)
+        self.substring_match_checkbox.setToolTip("When checked: match if expected text is found anywhere in line.\nWhen unchecked: entire line must match expected text exactly.")
+        self.substring_match_checkbox.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        h_layout_match.addWidget(self.substring_match_checkbox)
+        layout_last.addLayout(h_layout_match)
         
         # Success action
         self.success_action_combo = QComboBox()
@@ -341,7 +358,8 @@ class OutputBlock(MacroBlock):
             result: Dict[str, Any] = {
                 "output": {
                     "expected": self.expected_input.text() if hasattr(self, 'expected_input') and self.expected_input else "",
-                    "timeout": self.timeout_spinbox.value() if hasattr(self, 'timeout_spinbox') and self.timeout_spinbox else 1000
+                    "timeout": self.timeout_spinbox.value() if hasattr(self, 'timeout_spinbox') and self.timeout_spinbox else 1000,
+                    "substring_match": self.substring_match_checkbox.isChecked() if hasattr(self, 'substring_match_checkbox') and self.substring_match_checkbox else True
                 }
             }
             
@@ -438,6 +456,7 @@ class MacroCanvas(QWidget):
                               kwargs.get('fail_command', ''),
                               kwargs.get('success_action', 'Continue'),
                               kwargs.get('success_command', ''),
+                              kwargs.get('substring_match', True),
                               self.accent_color, 
                               self.hover_color, 
                               self.background_color)
@@ -766,7 +785,8 @@ class MacroEditor(QDialog):
                                         fail_action=fail_action,
                                         fail_command=fail_command,
                                         success_action=success_action,
-                                        success_command=success_command)
+                                        success_command=success_command,
+                                        substring_match=output_data.get('substring_match', True))
         
         except Exception as e:
             QMessageBox.warning(self, "Load Error", f"Failed to load macro: {e}")

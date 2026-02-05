@@ -977,11 +977,13 @@ class MainWindow(QMainWindow):
                     timeout_ms = output_config.get('timeout', 1000)
                     fail_action = output_config.get('fail')
                     success_action = output_config.get('success')
+                    substring_match = output_config.get('substring_match', True)
                     
-                    self._print_to_display_threadsafe(f"Step {i}: Expect '{expected}' (timeout {timeout_ms}ms)")
+                    match_type = "substring" if substring_match else "full line"
+                    self._print_to_display_threadsafe(f"Step {i}: Expect '{expected}' ({match_type}, timeout {timeout_ms}ms)")
                     
                     # Wait and check for expected output
-                    received = self._wait_for_response(expected, timeout_ms / 1000.0)
+                    received = self._wait_for_response(expected, timeout_ms / 1000.0, substring_match)
                     
                     if not received:
                         self._print_to_display_threadsafe(f"Step {i}: ✗ FAILED - Expected output not received")
@@ -1123,8 +1125,15 @@ class MainWindow(QMainWindow):
             self.macro_session_active = False
             self.macro_session_buffer.clear()
     
-    def _wait_for_response(self, expected: str, timeout: float) -> bool:
-        """Wait for expected response from serial port"""
+    def _wait_for_response(self, expected: str, timeout: float, substring_match: bool = True) -> bool:
+        """Wait for expected response from serial port
+        
+        Args:
+            expected: The text to search for
+            timeout: Maximum time to wait in seconds
+            substring_match: If True, match if expected is found anywhere in line.
+                           If False, entire line must match expected exactly.
+        """
         start_time = time.time()
         expected_stripped = expected.strip()
         
@@ -1132,8 +1141,12 @@ class MainWindow(QMainWindow):
         with self.macro_session_lock:
             for line in self.macro_session_buffer:
                 line_stripped = line.strip()
-                if expected_stripped in line_stripped:
-                    return True
+                if substring_match:
+                    if expected_stripped in line_stripped:
+                        return True
+                else:
+                    if expected_stripped == line_stripped:
+                        return True
         
         # If not found in buffer, wait for new data to arrive in the session buffer
         while time.time() - start_time < timeout:
@@ -1141,8 +1154,12 @@ class MainWindow(QMainWindow):
                 # Check entire session buffer for the expected response
                 for line in self.macro_session_buffer:
                     line_stripped = line.strip()
-                    if expected_stripped in line_stripped:
-                        return True
+                    if substring_match:
+                        if expected_stripped in line_stripped:
+                            return True
+                    else:
+                        if expected_stripped == line_stripped:
+                            return True
             
             time.sleep(0.01)  # Small sleep to avoid busy waiting
         
