@@ -29,6 +29,10 @@ from PyQt5.QtWidgets import (
     QTextEdit, QLineEdit, QLabel, QComboBox, QMessageBox, QTableWidget, QTableWidgetItem, QInputDialog, QDialog, QListWidget, QCheckBox,
     QSpinBox, QTabWidget, QFileDialog, QMenu, QAction, QScrollArea
 )
+<<<<<<< HEAD
+from PyQt5.QtCore import QTimer, Qt, QPoint, pyqtSignal, pyqtSlot, QThread, QEvent
+from PyQt5.QtGui import QMouseEvent, QCloseEvent, QKeyEvent, QIcon
+=======
 from PyQt5.QtCore import QTimer, Qt, QPoint, pyqtSignal, pyqtSlot, QThread, QEvent, QPropertyAnimation, QEasingCurve
 from PyQt5.QtGui import QMouseEvent, QCloseEvent, QKeyEvent, QIcon, QStandardItemModel, QStandardItem
 from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QColorDialog, QAbstractItemView
