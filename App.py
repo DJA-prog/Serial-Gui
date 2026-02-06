@@ -19,7 +19,7 @@ from ThemesDialog import ThemesDialog
 from ManualDialog import ManualDialog
 
 # Application version
-__version__ = "2.4.0"
+__version__ = "2.5.0"
 
 # sip is uncommented in windows pyinstaller build
 # import sip
@@ -29,7 +29,7 @@ from PyQt5.QtWidgets import (
     QTextEdit, QLineEdit, QLabel, QComboBox, QMessageBox, QTableWidget, QTableWidgetItem, QInputDialog, QDialog, QListWidget, QCheckBox,
     QSpinBox, QTabWidget, QFileDialog, QMenu, QAction, QScrollArea
 )
-from PyQt5.QtCore import QTimer, Qt, QPoint, pyqtSignal, pyqtSlot, QThread, QEvent
+from PyQt5.QtCore import QTimer, Qt, QPoint, pyqtSignal, pyqtSlot, QThread, QEvent, QPropertyAnimation, QEasingCurve
 from PyQt5.QtGui import QMouseEvent, QCloseEvent, QKeyEvent, QIcon
 from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QColorDialog, QAbstractItemView
 
@@ -326,7 +326,16 @@ class MainWindow(QMainWindow):
 
         
         self.middle_layout = QHBoxLayout() # Middle layout: Split into left (tables) and right (output)
+        
+        # Create a container widget for the left panel to enable animation
+        self.left_panel_container = QWidget()
+        self.left_panel_layout = QVBoxLayout(self.left_panel_container)
+        self.left_panel_layout.setContentsMargins(0, 0, 0, 0)
+        self.left_panel_visible = True  # Track visibility state
+        
         self.create_left_panel()  # Create the left panel with configuration and routing tables
+        self.middle_layout.addWidget(self.left_panel_container)
+        
         self.create_right_panel()  # Create the right panel with response display
         self.main_layout.addLayout(self.middle_layout)
 
@@ -432,9 +441,7 @@ class MainWindow(QMainWindow):
     def create_left_panel(self) -> None:
         # Left layout: Tabbed panel for Configuration and Routing tables
 
-        self.left_panel_width = 400
-
-        left_layout = QVBoxLayout()
+        self.left_panel_width = 350
 
         self.tab_widget = QTabWidget()
         self.tab_widget.setFixedWidth(self.left_panel_width)
@@ -459,8 +466,8 @@ class MainWindow(QMainWindow):
         # Connect tab change handler to save current tab
         self.tab_widget.currentChanged.connect(self.save_current_tab)
 
-        left_layout.addWidget(self.tab_widget)
-        self.middle_layout.addLayout(left_layout)
+        self.left_panel_layout.addWidget(self.tab_widget)
+        self.left_panel_container.setFixedWidth(self.left_panel_width)
         
         # Restore last serial port if it exists
         last_port = self.settings.get('general', {}).get('last_serial_port', '')
@@ -468,6 +475,41 @@ class MainWindow(QMainWindow):
             index = self.port_combo.findText(last_port)
             if index >= 0:
                 self.port_combo.setCurrentIndex(index)
+
+    def toggle_left_panel(self) -> None:
+        """Toggle the visibility of the left panel with slide animation"""
+        # Calculate the target width
+        if self.left_panel_visible:
+            # Hide panel
+            start_width = self.left_panel_width
+            end_width = 0
+            self.toggle_panel_button.setText("▶ Show Panel")
+        else:
+            # Show panel
+            start_width = 0
+            end_width = self.left_panel_width
+            self.toggle_panel_button.setText("◀ Hide Panel")
+        
+        # Create animation for smooth sliding
+        self.panel_animation = QPropertyAnimation(self.left_panel_container, b"maximumWidth")
+        self.panel_animation.setDuration(300)  # 300ms animation
+        self.panel_animation.setStartValue(start_width)
+        self.panel_animation.setEndValue(end_width)
+        self.panel_animation.setEasingCurve(QEasingCurve.InOutQuad)
+        
+        # Also animate minimum width to ensure smooth resizing
+        self.panel_animation_min = QPropertyAnimation(self.left_panel_container, b"minimumWidth")
+        self.panel_animation_min.setDuration(300)
+        self.panel_animation_min.setStartValue(start_width)
+        self.panel_animation_min.setEndValue(end_width)
+        self.panel_animation_min.setEasingCurve(QEasingCurve.InOutQuad)
+        
+        # Start both animations
+        self.panel_animation.start()
+        self.panel_animation_min.start()
+        
+        # Toggle the visibility state
+        self.left_panel_visible = not self.left_panel_visible
 
     def load_yaml_commands(self, filepath: str) -> dict:
         with open(filepath, "r") as f:
@@ -1666,6 +1708,11 @@ class MainWindow(QMainWindow):
         # Predefined commands
         predefined_layout = QHBoxLayout()
 
+        self.toggle_panel_button = QPushButton("◀ Hide Panel")
+        self.toggle_panel_button.clicked.connect(self.toggle_left_panel)
+        self.toggle_panel_button.setToolTip("Show/hide the left panel")
+        predefined_layout.addWidget(self.toggle_panel_button)
+
         for key, button in self.settings["quick_buttons"].items():
             if isinstance(button, dict):
                 label = button.get('label', '')
@@ -1691,6 +1738,7 @@ class MainWindow(QMainWindow):
         self.clear_button = QPushButton("Clear output")
         self.clear_button.clicked.connect(self.clear_output)
         self.clear_button.setToolTip("Clear all text from the output display")
+        
 
         predefined_layout.addWidget(self.save_output_button)
         predefined_layout.addWidget(self.clear_button)
