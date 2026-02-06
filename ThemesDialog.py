@@ -62,6 +62,34 @@ class ThemesDialog(QDialog):
             "font_color": "#E1BEE7",
             "background_color": "#1A0B1A",
             "description": "Rich purple theme for a unique and creative look. Stand out from the crowd."
+        },
+        "Windows XP": {
+            "accent_color": "#0063B1",
+            "hover_color": "#3399FF",
+            "font_color": "#E8F4FF",
+            "background_color": "#001F3F",
+            "description": "Nostalgic Luna blue theme inspired by Windows XP. Brings back memories of the early 2000s computing era."
+        },
+        "Windows 7": {
+            "accent_color": "#3E8EDE",
+            "hover_color": "#6CB4EE",
+            "font_color": "#F0F0F0",
+            "background_color": "#1A2332",
+            "description": "Classic Aero-inspired theme from Windows 7. Professional glass-like aesthetics with refined blue tones."
+        },
+        "Windows 10": {
+            "accent_color": "#0078D4",
+            "hover_color": "#40A0E0",
+            "font_color": "#FFFFFF",
+            "background_color": "#1E1E1E",
+            "description": "Modern flat design from Windows 10. Clean, contemporary look with Microsoft's signature blue."
+        },
+        "Windows 11": {
+            "accent_color": "#0067C0",
+            "hover_color": "#4DA3E0",
+            "font_color": "#F5F5F5",
+            "background_color": "#202020",
+            "description": "Refined modern design from Windows 11. Soft rounded aesthetics with a polished, contemporary feel."
         }
     }
     

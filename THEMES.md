@@ -142,6 +142,42 @@ background_color: '#1A0B1A'
 ![Purple Haze Theme](images/purple_haze_theme.png)
 Rich purple for a unique look.
 
+### Windows XP
+```yaml
+accent_color: '#0063B1'
+hover_color: '#3399FF'
+font_color: '#E8F4FF'
+background_color: '#001F3F'
+```
+Nostalgic Luna blue theme inspired by Windows XP. Brings back memories of the early 2000s computing era with the iconic bright blue aesthetic.
+
+### Windows 7
+```yaml
+accent_color: '#3E8EDE'
+hover_color: '#6CB4EE'
+font_color: '#F0F0F0'
+background_color: '#1A2332'
+```
+Classic Aero-inspired theme from Windows 7. Professional glass-like aesthetics with refined blue tones and the sophisticated look of the Aero interface.
+
+### Windows 10
+```yaml
+accent_color: '#0078D4'
+hover_color: '#40A0E0'
+font_color: '#FFFFFF'
+background_color: '#1E1E1E'
+```
+Modern flat design from Windows 10. Clean, contemporary look with Microsoft's signature blue and the sleek modern interface style.
+
+### Windows 11
+```yaml
+accent_color: '#0067C0'
+hover_color: '#4DA3E0'
+font_color: '#F5F5F5'
+background_color: '#202020'
+```
+Refined modern design from Windows 11. Soft rounded aesthetics with a polished, contemporary feel inspired by Microsoft's latest OS design language.
+
 ## Troubleshooting
 
 ### Colors Look Washed Out
