@@ -24,34 +24,6 @@
 - **Presentation mode** - Clean interface when demonstrating or sharing screen
 - **Flexible workflow** - Toggle panel visibility as needed during use
 
-### 🎨 Windows-Inspired Themes
-
-#### Four New Theme Options
-- **Windows XP** - Nostalgic Luna blue theme with iconic bright blue (#0063B1)
-- **Windows 7** - Classic Aero-inspired glass-like aesthetics (#3E8EDE)  
-- **Windows 10** - Modern flat design with Microsoft's signature blue (#0078D4)
-- **Windows 11** - Refined modern design with soft rounded aesthetics (#0067C0)
-- **Total themes available** - 11 pre-programmed themes to choose from
-- **Easy access** - Available in Themes Dialog from About tab
-- **Instant application** - Apply immediately with automatic settings save
-
-#### Use Cases
-- **Nostalgia** - Relive computing history with classic Windows themes
-- **Consistency** - Match your operating system's look and feel
-- **Variety** - More options for personal customization
-- **Professional** - Windows-inspired themes offer familiar, professional appearance
-
-### 📊 Serial Port Availability Detection
-
-#### Smart Port Status Checking
-- **Automatic detection** - Checks if serial ports are in use by other applications
-- **Tooltip indicators** - Hover over ports to see availability status
-  - "Available" - Port is free and ready to use
-  - "Currently in use" - Port is occupied by another application
-- **Real-time updates** - Status updates during periodic port refresh
-- **Own port detection** - Your currently connected port shows as available
-- **Non-intrusive** - Status available on-demand without visual clutter
-
 ### 🐛 Bug Fixes and Stability Improvements
 
 #### Line Filter Fixes
@@ -93,26 +65,19 @@
 ## Technical Details
 
 ### Modified Files
-- **App.py** - Added collapsible panel system, animation support, port availability checking, filter fixes, and version 2.5.0
+- **App.py** - Added collapsible panel system, animation support, filter fixes, and version bump to 2.5.0
 - **MacroEditor.py** - Enhanced error handling for OutputBlock with signal blocking and RuntimeError protection
-- **ThemesDialog.py** - Added four new Windows-inspired themes (XP, 7, 10, 11)
-- **THEMES.md** - Documentation for all 11 themes including new Windows themes
-- **StyleManager.py** - Removed color override from combo box dropdown to allow custom item styling
 
 ### New Imports in App.py
 - **QPropertyAnimation** - Enables smooth width animations for panel toggle
 - **QEasingCurve** - Provides animation easing for professional transitions
-- **QStandardItemModel, QStandardItem** - For custom combo box item management
 
 ### New Methods in App.py
 - `toggle_left_panel()` - Handles panel visibility toggle with animated transitions
-- `is_port_in_use()` - Checks if a serial port is currently occupied
-- `populate_port_combo()` - Populates combo box with port availability tooltips
 
 ### Enhanced Methods in App.py
 - `create_left_panel()` - Updated to use container widget for animation support
 - `handle_serial_data()` - Fixed filtering logic to preserve empty lines when appropriate
-- `refresh_serial_ports()` - Now always repopulates combo box to update port availability
 
 ### Enhanced Methods in MacroEditor.py
 - `OutputBlock.__init__()` - Added signal blocking and immediate visibility updates
@@ -121,17 +86,10 @@
 - `OutputBlock.on_fail_action_changed()` - Added RuntimeError handling for widget access
 - `OutputBlock.to_dict()` - Comprehensive RuntimeError protection for all widget access
 
-### New Themes
-- **Windows XP** - Luna blue (#0063B1, #3399FF, #E8F4FF, #001F3F)
-- **Windows 7** - Aero glass (#3E8EDE, #6CB4EE, #F0F0F0, #1A2332)
-- **Windows 10** - Flat modern (#0078D4, #40A0E0, #FFFFFF, #1E1E1E)
-- **Windows 11** - Refined modern (#0067C0, #4DA3E0, #F5F5F5, #202020)
-
 ## Upgrade Notes
 
 - **No breaking changes** - All v2.4.0 settings and configurations fully compatible
 - **Seamless upgrade** - Panel visibility state not persisted, always starts visible
-- **New themes** - Four additional Windows-themed color schemes now available
 - **Backward compatible** - All existing features continue to work unchanged
 - **Windows users** - Significant stability improvements for macro editor on Windows 11 and updated Windows 10 systems
 - **Filter behavior** - Line filters now work correctly; may notice improved filtering behavior
@@ -140,10 +98,18 @@
 
 - None reported at this time
 
+## System Requirements
+
+- **Python 3.8+**
+- **PyQt5**
+- **pyserial**
+- **PyYAML**
+
 ## Tested Platforms
 
 - ✅ Debian 13
 - ✅ Windows 10 (Version 22H2)
+- ✅ Windows 11 (all updates)
 - 🔄 Should work on macOS and other Linux distributions
 
 ---
