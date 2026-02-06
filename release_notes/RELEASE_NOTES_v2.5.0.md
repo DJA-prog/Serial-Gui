@@ -140,18 +140,10 @@
 
 - None reported at this time
 
-## System Requirements
-
-- **Python 3.8+**
-- **PyQt5**
-- **pyserial**
-- **PyYAML**
-
 ## Tested Platforms
 
 - ✅ Debian 13
 - ✅ Windows 10 (Version 22H2)
-- ✅ Windows 11 (all updates)
 - 🔄 Should work on macOS and other Linux distributions
 
 ---

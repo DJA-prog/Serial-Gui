@@ -76,7 +76,6 @@ class StyleManager:
             }}
             QComboBox QAbstractItemView {{
                 background-color: {self.bg_tertiary};
-                color: {self.font_color};
                 border: 1px solid {self.accent_color};
                 selection-background-color: {self.accent_color};
                 selection-color: {self.font_color};
@@ -279,7 +278,6 @@ class StyleManager:
             }}
             QComboBox QAbstractItemView {{
                 background-color: {self.bg_tertiary};
-                color: {self.font_color};
                 border: 1px solid {self.accent_color};
                 selection-background-color: {self.accent_color};
                 selection-color: {self.font_color};

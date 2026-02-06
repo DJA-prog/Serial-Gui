@@ -29,8 +29,8 @@ from PyQt5.QtWidgets import (
     QTextEdit, QLineEdit, QLabel, QComboBox, QMessageBox, QTableWidget, QTableWidgetItem, QInputDialog, QDialog, QListWidget, QCheckBox,
     QSpinBox, QTabWidget, QFileDialog, QMenu, QAction, QScrollArea
 )
-from PyQt5.QtCore import QTimer, Qt, QPoint, pyqtSignal, pyqtSlot, QThread, QEvent
-from PyQt5.QtGui import QMouseEvent, QCloseEvent, QKeyEvent, QIcon
+from PyQt5.QtCore import QTimer, Qt, QPoint, pyqtSignal, pyqtSlot, QThread, QEvent, QPropertyAnimation, QEasingCurve
+from PyQt5.QtGui import QMouseEvent, QCloseEvent, QKeyEvent, QIcon, QStandardItemModel, QStandardItem
 from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QColorDialog, QAbstractItemView
 
 def get_resource_path(relative_path: str) -> str:
@@ -385,9 +385,9 @@ class MainWindow(QMainWindow):
         top_layout = QHBoxLayout()
         port_label = QLabel("Serial Port:")
         self.port_combo = QComboBox()
-        self.port_combo.addItems(self.available_ports)
+        self.populate_port_combo()  # Populate with color-coded availability
         self.port_combo.setFixedWidth(150)  # Set fixed width for the port dropdown
-        self.port_combo.setToolTip("Select the serial port to connect to")
+        self.port_combo.setToolTip("Select the serial port to connect to. Hover over ports to see availability.")
 
         baud_rate_label = QLabel("Baud Rate:")
         self.baud_rate_combo = QComboBox()
@@ -2033,6 +2033,49 @@ class MainWindow(QMainWindow):
         # Filter out unwanted devices (ttyS on Linux, which are typically built-in ports that don't work well)
         # On Windows, this filter won't match anything (COM ports don't contain "ttyS")
         return [port.device for port in ports if "ttyS" not in port.device]
+    
+    def is_port_in_use(self, port_name: str) -> bool:
+        """Check if a serial port is currently in use by attempting to open it."""
+        # Skip check if this is our currently connected port
+        if self.serial_port and self.serial_port.is_open and self.serial_port.port == port_name:
+            return False  # Our own port is available to us
+        
+        try:
+            # Try to open the port briefly
+            test_port = serial.Serial(port_name, timeout=0)
+            test_port.close()
+            return False  # Port is available
+        except (serial.SerialException, OSError):
+            return True  # Port is in use or inaccessible
+    
+    def populate_port_combo(self) -> None:
+        """Populate the port combo box with availability tooltips."""
+        # Save current selection
+        current_text = self.port_combo.currentText()
+        
+        # Create a new model
+        model = QStandardItemModel()
+        
+        # Add items with tooltips
+        for port in self.available_ports:
+            item = QStandardItem(port)
+            
+            # Check if port is in use and set tooltip
+            if self.is_port_in_use(port):
+                item.setToolTip(f"{port} - Currently in use")
+            else:
+                item.setToolTip(f"{port} - Available")
+            
+            model.appendRow(item)
+        
+        # Set the model on the combo box
+        self.port_combo.setModel(model)
+        
+        # Restore previous selection if it still exists
+        if current_text:
+            index = self.port_combo.findText(current_text)
+            if index >= 0:
+                self.port_combo.setCurrentIndex(index)
 
     def print_to_display(self, message: str) -> None:
         # Store original message for processing
@@ -2113,11 +2156,12 @@ class MainWindow(QMainWindow):
     def refresh_serial_ports(self) -> None:
         current_ports = self.get_serial_ports()
 
-        # Update port list if it has changed
+        # Always repopulate to update colors, even if port list hasn't changed
         if current_ports != self.available_ports:
             self.available_ports = current_ports
-            self.port_combo.clear()
-            self.port_combo.addItems(self.available_ports)
+        
+        # Repopulate with color-coded entries
+        self.populate_port_combo()
 
         # Auto-reconnect if needed
         if self.auto_reconnect_checkbox.isChecked():
