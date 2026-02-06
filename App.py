@@ -2357,6 +2357,9 @@ class MainWindow(QMainWindow):
         # Split data into lines for filtering
         lines = data.split('\n')
         filtered_lines = []
+
+        if lines[-1] == '':
+            lines = lines[:-1]  # Remove the last empty line caused by split if it exists
         
         for line in lines:
             # Filter empty lines if enabled
