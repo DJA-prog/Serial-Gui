@@ -221,36 +221,30 @@ class OutputBlock(MacroBlock):
         
         super().__init__("output", "Expect Output", parent, accent_color, hover_color, background_color)
         
-        # Block signals during initialization to prevent crashes on Windows
+        # Set values after all widgets are created (no signal blocking needed since signals aren't connected yet)
         try:
-            # Block combo box signals
-            if hasattr(self, 'fail_action_combo') and self.fail_action_combo is not None:
-                self.fail_action_combo.blockSignals(True)
-            if hasattr(self, 'success_action_combo') and self.success_action_combo is not None:
-                self.success_action_combo.blockSignals(True)
-            
-            # Set values after all widgets are created
+            # Set values for all widgets
             if hasattr(self, 'expected_input') and self.expected_input is not None:
                 self.expected_input.setText(expected)
             if hasattr(self, 'timeout_spinbox') and self.timeout_spinbox is not None:
                 self.timeout_spinbox.setValue(timeout)
             
-            # Set fail action after widgets are created
+            # Set fail action and update visibility
             if hasattr(self, 'fail_action_combo') and self.fail_action_combo is not None:
                 if fail_action in ["Ignore", "Continue", "Exit Macro", "Custom Command", "Dialog for Command", "Dialog and Wait"]:
                     self.fail_action_combo.setCurrentText(fail_action)
-                    # Update visibility immediately without signal
+                    # Update visibility immediately (no signal to trigger it yet)
                     if hasattr(self, 'fail_command_input') and self.fail_command_input is not None:
                         self.fail_command_input.setVisible(fail_action == "Custom Command")
             
             if hasattr(self, 'fail_command_input') and self.fail_command_input is not None and fail_command:
                 self.fail_command_input.setText(fail_command)
             
-            # Set success action
+            # Set success action and update visibility
             if hasattr(self, 'success_action_combo') and self.success_action_combo is not None:
                 if success_action in ["Ignore", "Continue", "Exit Macro", "Custom Command", "Dialog for Command", "Dialog and Wait"]:
                     self.success_action_combo.setCurrentText(success_action)
-                    # Update visibility immediately without signal
+                    # Update visibility immediately (no signal to trigger it yet)
                     if hasattr(self, 'success_command_input') and self.success_command_input is not None:
                         self.success_command_input.setVisible(success_action == "Custom Command")
             
@@ -263,16 +257,9 @@ class OutputBlock(MacroBlock):
         except Exception as e:
             print(f"OutputBlock initialization error: {e}")
         finally:
-            # Unblock signals now that initialization is complete
-            try:
-                if hasattr(self, 'fail_action_combo') and self.fail_action_combo is not None:
-                    self.fail_action_combo.blockSignals(False)
-                if hasattr(self, 'success_action_combo') and self.success_action_combo is not None:
-                    self.success_action_combo.blockSignals(False)
-            except Exception as e:
-                print(f"OutputBlock signal unblock error: {e}")
-            # Initialization complete
+            # Initialization complete - now connect signals safely
             self._initializing = False
+            self._connect_signals()
     
     def setup_block_content(self, layout: QHBoxLayout):
         layout_last = QVBoxLayout()
@@ -340,21 +327,29 @@ class OutputBlock(MacroBlock):
 
         layout.addLayout(layout_last)
         
-        # Connect signals AFTER all widgets are created with additional safety checks
+        # DO NOT connect signals here - they will be connected after initialization completes
+        # This prevents race conditions on Windows where signals can fire during initialization
+    
+    def _connect_signals(self):
+        """Connect signals after widget initialization is complete to prevent Windows race conditions"""
         try:
             if hasattr(self, 'success_action_combo') and self.success_action_combo is not None:
                 # Verify the widget is fully initialized before connecting
                 if hasattr(self.success_action_combo, 'currentTextChanged'):
-                    self.success_action_combo.currentTextChanged.connect(self.on_success_action_changed)
+                    try:
+                        self.success_action_combo.currentTextChanged.connect(self.on_success_action_changed)
+                    except RuntimeError as e:
+                        print(f"OutputBlock success_action_combo signal connection RuntimeError: {e}")
+                        
             if hasattr(self, 'fail_action_combo') and self.fail_action_combo is not None:
                 # Verify the widget is fully initialized before connecting
                 if hasattr(self.fail_action_combo, 'currentTextChanged'):
-                    self.fail_action_combo.currentTextChanged.connect(self.on_fail_action_changed)
-        except RuntimeError as e:
-            # Handle C++ wrapped object deletion issues on Windows
-            print(f"OutputBlock signal connection RuntimeError: {e}")
+                    try:
+                        self.fail_action_combo.currentTextChanged.connect(self.on_fail_action_changed)
+                    except RuntimeError as e:
+                        print(f"OutputBlock fail_action_combo signal connection RuntimeError: {e}")
         except Exception as e:
-            print(f"OutputBlock signal connection error: {e}")
+            print(f"OutputBlock _connect_signals error: {e}")
     
     def on_success_action_changed(self, text: str):
         """Handle success action combo box changes with error protection"""
@@ -366,10 +361,16 @@ class OutputBlock(MacroBlock):
             if hasattr(self, 'success_command_input') and self.success_command_input is not None:
                 # Verify widget still exists (not deleted by Qt)
                 try:
+                    # Check if C++ object is still valid before accessing
+                    if not hasattr(self.success_command_input, 'setVisible'):
+                        return
                     self.success_command_input.setVisible(text == "Custom Command")
-                except RuntimeError:
-                    # Widget was deleted, probably during cleanup
-                    pass
+                except RuntimeError as e:
+                    # Widget was deleted by Qt (C++ object no longer exists)
+                    print(f"OutputBlock on_success_action_changed RuntimeError: {e}")
+        except AttributeError as e:
+            # Attribute doesn't exist
+            print(f"OutputBlock on_success_action_changed AttributeError: {e}")
         except Exception as e:
             print(f"Error in on_success_action_changed: {e}")
     
@@ -383,10 +384,16 @@ class OutputBlock(MacroBlock):
             if hasattr(self, 'fail_command_input') and self.fail_command_input is not None:
                 # Verify widget still exists (not deleted by Qt)
                 try:
+                    # Check if C++ object is still valid before accessing
+                    if not hasattr(self.fail_command_input, 'setVisible'):
+                        return
                     self.fail_command_input.setVisible(text == "Custom Command")
-                except RuntimeError:
-                    # Widget was deleted, probably during cleanup
-                    pass
+                except RuntimeError as e:
+                    # Widget was deleted by Qt (C++ object no longer exists)
+                    print(f"OutputBlock on_fail_action_changed RuntimeError: {e}")
+        except AttributeError as e:
+            # Attribute doesn't exist
+            print(f"OutputBlock on_fail_action_changed AttributeError: {e}")
         except Exception as e:
             print(f"Error in on_fail_action_changed: {e}")
     
