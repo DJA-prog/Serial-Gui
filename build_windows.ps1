@@ -91,10 +91,10 @@ Write-Host ""
 $buildCommand = @(
     "pyinstaller",
     "--onefile",                                               # Single executable file
-    "--name=Serial_monitor_" + $versionSuffix + "_x86-64",    # Output executable name with version suffix
+    "--name=Serial_monitor_v" + $versionSuffix + "_x86-64",    # Output executable name with version suffix
     "--icon=images\icon.png",                                  # Application icon
-    "--add-data=images\icon.png;images",                       # Include icon for runtime use
-    "--add-data=commands;commands",                            # Include command YAML files
+    "'"--add-data=images\icon.png;images"'",                       # Include icon for runtime use
+    "'"--add-data=commands;commands"'",                            # Include command YAML files
     "--clean",                                                 # Clean PyInstaller cache
     "--noconfirm"                                              # Overwrite without confirmation
 )
