@@ -8,6 +8,15 @@ from typing import Optional, Dict, Any, List, TYPE_CHECKING
 if TYPE_CHECKING:
     from StyleManager import StyleManager
 
+# Import debug handler
+try:
+    from DebugHandler import get_debug_handler
+    DEBUG_ENABLED = True
+except:
+    DEBUG_ENABLED = False
+    def get_debug_handler():
+        return None
+
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QLabel,
     QLineEdit, QScrollArea, QMessageBox, QSpinBox, QComboBox, QFrame,
@@ -516,80 +525,104 @@ class MacroCanvas(QWidget):
     
     def add_block(self, block_type: str, **kwargs):
         """Add a new block to the canvas"""
-        block: Optional[MacroBlock] = None
+        debug = get_debug_handler()
+        if debug and debug.enabled:
+            debug.log(f"MacroEditor: Adding block type '{block_type}'", "DEBUG")
+        
+        try:
+            block: Optional[MacroBlock] = None
 
-        if block_type == "input":
-            block = InputBlock(self.container, kwargs.get('command', ''), self.accent_color, self.hover_color, self.background_color)
-        elif block_type == "delay":
-            block = DelayBlock(self.container, kwargs.get('delay', 1000), self.accent_color, self.hover_color, self.background_color)
-        elif block_type == "dialog_wait":
-            block = DialogWaitBlock(self.container, kwargs.get('message', ''), self.accent_color, self.hover_color, self.background_color)
-        elif block_type == "output":
-            block = OutputBlock(self.container, 
-                              kwargs.get('expected', ''), 
-                              kwargs.get('timeout', 1000),
-                              kwargs.get('fail_action', 'Continue'),
-                              kwargs.get('fail_command', ''),
-                              kwargs.get('success_action', 'Continue'),
-                              kwargs.get('success_command', ''),
-                              kwargs.get('substring_match', True),
-                              self.accent_color, 
-                              self.hover_color, 
-                              self.background_color)
+            if block_type == "input":
+                block = InputBlock(self.container, kwargs.get('command', ''), self.accent_color, self.hover_color, self.background_color)
+            elif block_type == "delay":
+                block = DelayBlock(self.container, kwargs.get('delay', 1000), self.accent_color, self.hover_color, self.background_color)
+            elif block_type == "dialog_wait":
+                block = DialogWaitBlock(self.container, kwargs.get('message', ''), self.accent_color, self.hover_color, self.background_color)
+            elif block_type == "output":
+                block = OutputBlock(self.container, 
+                                  kwargs.get('expected', ''), 
+                                  kwargs.get('timeout', 1000),
+                                  kwargs.get('fail_action', 'Continue'),
+                                  kwargs.get('fail_command', ''),
+                                  kwargs.get('success_action', 'Continue'),
+                                  kwargs.get('success_command', ''),
+                                  kwargs.get('substring_match', True),
+                                  self.accent_color, 
+                                  self.hover_color, 
+                                  self.background_color)
             
-        if block:
-            # Add vertical button group (Up, Close, Down)
-            sizePolicy = QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
-            btn_col = QVBoxLayout()
-            btn_col.setSpacing(0)
-            btn_col.setContentsMargins(0, 0, 0, 0)
-            
-            up_btn = QPushButton("↑")
-            up_btn.setSizePolicy(sizePolicy)
-            up_btn.setFixedWidth(20)
-            up_btn.setStyleSheet(f"border-radius: 0; background-color: {self.accent_color}; color: {self.font_color};")
-            up_btn.clicked.connect(lambda _, b=block: self.move_block_up(b))
-            btn_col.addWidget(up_btn, 1)
+            if block:
+                # Add vertical button group (Up, Close, Down)
+                sizePolicy = QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
+                btn_col = QVBoxLayout()
+                btn_col.setSpacing(0)
+                btn_col.setContentsMargins(0, 0, 0, 0)
+                
+                up_btn = QPushButton("↑")
+                up_btn.setSizePolicy(sizePolicy)
+                up_btn.setFixedWidth(20)
+                up_btn.setStyleSheet(f"border-radius: 0; background-color: {self.accent_color}; color: {self.font_color};")
+                up_btn.clicked.connect(lambda _, b=block: self.move_block_up(b))
+                btn_col.addWidget(up_btn, 1)
 
-            close_btn = QPushButton("✕")
-            close_btn.setSizePolicy(sizePolicy)
-            close_btn.setFixedWidth(20)
-            close_btn.setStyleSheet(f"border-radius: 0; background-color: {self.accent_color}; color: {self.font_color};")
-            close_btn.clicked.connect(lambda _, b=block: self.remove_block(b))
-            btn_col.addWidget(close_btn, 1)
+                close_btn = QPushButton("✕")
+                close_btn.setSizePolicy(sizePolicy)
+                close_btn.setFixedWidth(20)
+                close_btn.setStyleSheet(f"border-radius: 0; background-color: {self.accent_color}; color: {self.font_color};")
+                close_btn.clicked.connect(lambda _, b=block: self.remove_block(b))
+                btn_col.addWidget(close_btn, 1)
 
-            down_btn = QPushButton("↓")
-            down_btn.setSizePolicy(sizePolicy)
-            down_btn.setFixedWidth(20)
-            down_btn.setStyleSheet(f"border-radius: 0; background-color: {self.accent_color}; color: {self.font_color};")
-            down_btn.clicked.connect(lambda _, b=block: self.move_block_down(b))
-            btn_col.addWidget(down_btn, 1)
+                down_btn = QPushButton("↓")
+                down_btn.setSizePolicy(sizePolicy)
+                down_btn.setFixedWidth(20)
+                down_btn.setStyleSheet(f"border-radius: 0; background-color: {self.accent_color}; color: {self.font_color};")
+                down_btn.clicked.connect(lambda _, b=block: self.move_block_down(b))
+                btn_col.addWidget(down_btn, 1)
 
-            # Add button column to block layout
-            block_layout = block.layout()
-            if block_layout:
-                block_layout.setSpacing(5)
-                block_layout.setContentsMargins(5, 5, 0, 5)
-                block_layout.addLayout(btn_col, 0)
+                # Add button column to block layout
+                block_layout = block.layout()
+                if block_layout:
+                    block_layout.setSpacing(5)
+                    block_layout.setContentsMargins(5, 5, 0, 5)
+                    block_layout.addLayout(btn_col, 0)
 
-            self.blocks.append(block)
-            self.container_layout.addWidget(block)
-            self.container.updateGeometry()
-            self.updateGeometry()
-            scroll_width = self.parent().width() if self.parent() else 450
-            self.container.setMinimumWidth(scroll_width)
-            self.container.setMaximumWidth(scroll_width)
-            self.container.resize(scroll_width, self.container.height())
+                self.blocks.append(block)
+                self.container_layout.addWidget(block)
+                self.container.updateGeometry()
+                self.updateGeometry()
+
+                scroll_width = self.parent().width() if self.parent() else 450
+                self.container.setMinimumWidth(scroll_width)
+                self.container.setMaximumWidth(scroll_width)
+                self.container.resize(scroll_width, self.container.height())
+                
+                if debug and debug.enabled:
+                    debug.log(f"MacroEditor: Block added successfully (total: {len(self.blocks)})", "DEBUG")
+            else:
+                if debug and debug.enabled:
+                    debug.log(f"MacroEditor: Failed to create block of type '{block_type}'", "WARNING")
+        
+        except Exception as e:
+            debug = get_debug_handler()
+            if debug and debug.enabled:
+                debug.log(f"MacroEditor: Exception adding block: {e}", "ERROR")
+                QMessageBox.critical(None, "Block Creation Error", f"Failed to create block:\n{e}")
+            raise
     
     def remove_block(self, block: MacroBlock):
-        if block in self.blocks:
-            self.blocks.remove(block)
-            block.deleteLater()
-            self.container.updateGeometry()
-            self.updateGeometry()
-            # print(f"\n=== Block Removed ===")
-            # print(f"Remaining blocks: {len(self.blocks)}")
-            # print(f"Container size after removal: {self.container.size().width()}x{self.container.size().height()}")
+        debug = get_debug_handler()
+        try:
+            if block in self.blocks:
+                if debug and debug.enabled:
+                    debug.log(f"MacroEditor: Removing block (remaining: {len(self.blocks)-1})", "DEBUG")
+                self.blocks.remove(block)
+                block.deleteLater()
+                self.container.updateGeometry()
+                self.updateGeometry()
+        except Exception as e:
+            if debug and debug.enabled:
+                debug.log(f"MacroEditor: Error removing block: {e}", "ERROR")
+            raise
     
     def clear_blocks(self):
         for block in self.blocks[:]:
@@ -797,11 +830,18 @@ class MacroEditor(QDialog):
     
     def load_macro(self, macro_path: Path):
         """Load an existing macro from YAML file"""
+        debug = get_debug_handler()
+        if debug and debug.enabled:
+            debug.log(f"MacroEditor: Loading macro from {macro_path}", "INFO")
+        
         try:
             with open(macro_path, 'r') as f:
                 data = yaml.safe_load(f)
             
             if not isinstance(data, dict):
+                if debug and debug.enabled:
+                    debug.log(f"MacroEditor: Invalid macro format in {macro_path}", "ERROR")
+                QMessageBox.warning(self, "Load Error", "Invalid macro file format.")
                 return
             
             # Get macro name
@@ -810,96 +850,141 @@ class MacroEditor(QDialog):
             # Get steps
             steps = data.get('steps', [])
             
-            for step in steps:
-                if 'input' in step:
-                    self.canvas.add_block('input', command=step['input'])
-                elif 'delay' in step:
-                    self.canvas.add_block('delay', delay=step['delay'])
-                elif 'dialog_wait' in step:
-                    dialog_data = step['dialog_wait']
-                    self.canvas.add_block('dialog_wait', message=dialog_data.get('message', ''))
-                elif 'output' in step:
-                    output_data = step['output']
-                    fail_data = output_data.get('fail')
-                    success_data = output_data.get('success')
+            if debug and debug.enabled:
+                debug.log(f"MacroEditor: Loading {len(steps)} steps", "DEBUG")
+            
+            for i, step in enumerate(steps, 1):
+                try:
+                    if 'input' in step:
+                        self.canvas.add_block('input', command=step['input'])
+                    elif 'delay' in step:
+                        self.canvas.add_block('delay', delay=step['delay'])
+                    elif 'dialog_wait' in step:
+                        dialog_data = step['dialog_wait']
+                        self.canvas.add_block('dialog_wait', message=dialog_data.get('message', ''))
+                    elif 'output' in step:
+                        output_data = step['output']
+                        fail_data = output_data.get('fail')
+                        success_data = output_data.get('success')
+                        
+                        # Determine fail action and fail command
+                        fail_action = "Continue"  # default
+                        fail_command = ""
+                        
+                        if fail_data == "IGNORE":
+                            fail_action = "Ignore"
+                        elif fail_data == "EXIT":
+                            fail_action = "Exit Macro"
+                        elif fail_data == "DIALOG":
+                            fail_action = "Dialog for Command"
+                        elif fail_data == "DIALOG_WAIT":
+                            fail_action = "Dialog and Wait"
+                        elif isinstance(fail_data, dict) and 'input' in fail_data:
+                            fail_action = "Custom Command"
+                            fail_command = fail_data['input']
+                        
+                        # Determine success action and success command
+                        success_action = "Continue"  # default
+                        success_command = ""
+                        
+                        if success_data == "IGNORE":
+                            success_action = "Ignore"
+                        elif success_data == "EXIT":
+                            success_action = "Exit Macro"
+                        elif success_data == "DIALOG":
+                            success_action = "Dialog for Command"
+                        elif success_data == "DIALOG_WAIT":
+                            success_action = "Dialog and Wait"
+                        elif isinstance(success_data, dict) and 'input' in success_data:
+                            success_action = "Custom Command"
+                            success_command = success_data['input']
                     
-                    # Determine fail action and fail command
-                    fail_action = "Continue"  # default
-                    fail_command = ""
-                    
-                    if fail_data == "IGNORE":
-                        fail_action = "Ignore"
-                    elif fail_data == "EXIT":
-                        fail_action = "Exit Macro"
-                    elif fail_data == "DIALOG":
-                        fail_action = "Dialog for Command"
-                    elif fail_data == "DIALOG_WAIT":
-                        fail_action = "Dialog and Wait"
-                    elif isinstance(fail_data, dict) and 'input' in fail_data:
-                        fail_action = "Custom Command"
-                        fail_command = fail_data['input']
-                    
-                    # Determine success action and success command
-                    success_action = "Continue"  # default
-                    success_command = ""
-                    
-                    if success_data == "IGNORE":
-                        success_action = "Ignore"
-                    elif success_data == "EXIT":
-                        success_action = "Exit Macro"
-                    elif success_data == "DIALOG":
-                        success_action = "Dialog for Command"
-                    elif success_data == "DIALOG_WAIT":
-                        success_action = "Dialog and Wait"
-                    elif isinstance(success_data, dict) and 'input' in success_data:
-                        success_action = "Custom Command"
-                        success_command = success_data['input']
-                    
-                    self.canvas.add_block('output', 
-                                        expected=output_data.get('expected', ''),
-                                        timeout=output_data.get('timeout', 1000),
-                                        fail_action=fail_action,
-                                        fail_command=fail_command,
-                                        success_action=success_action,
-                                        success_command=success_command,
-                                        substring_match=output_data.get('substring_match', True))
-        
+                        self.canvas.add_block('output',
+                                            expected=output_data.get('expected', ''),
+                                            timeout=output_data.get('timeout', 1000),
+                                            fail_action=fail_action,
+                                            fail_command=fail_command,
+                                            success_action=success_action,
+                                            success_command=success_command,
+                                            substring_match=output_data.get('substring_match', True))
+                except Exception as step_error:
+                    if debug and debug.enabled:
+                        debug.log(f"MacroEditor: Error loading step {i}: {step_error}", "ERROR")
+                    QMessageBox.warning(self, "Step Load Error", f"Failed to load step {i}: {step_error}")
+            
+            if debug and debug.enabled:
+                debug.log(f"MacroEditor: Successfully loaded {len(steps)} blocks", "INFO")
+                
+        except FileNotFoundError as e:
+            if debug and debug.enabled:
+                debug.log(f"MacroEditor: Macro file not found: {e}", "ERROR")
+            QMessageBox.warning(self, "Load Error", f"Macro file not found: {macro_path}")
+        except yaml.YAMLError as e:
+            if debug and debug.enabled:
+                debug.log(f"MacroEditor: YAML parse error: {e}", "ERROR")
+            QMessageBox.warning(self, "Load Error", f"Failed to parse macro file:\n{e}")
         except Exception as e:
+            if debug and debug.enabled:
+                debug.log(f"MacroEditor: Unexpected error loading macro: {e}", "ERROR")
             QMessageBox.warning(self, "Load Error", f"Failed to load macro: {e}")
     
     def save_macro(self):
         """Save the macro to YAML file"""
-        name = self.name_input.text().strip()
-        if not name:
-            QMessageBox.warning(self, "Invalid Name", "Please enter a macro name.")
-            return
+        debug = get_debug_handler()
+        if debug and debug.enabled:
+            debug.log("MacroEditor: Saving macro", "INFO")
         
-        if not self.canvas.blocks:
-            QMessageBox.warning(self, "Empty Macro", "Please add at least one block to the macro.")
-            return
-        
-        # Convert blocks to YAML structure
-        steps = self.canvas.to_yaml_list()
-        
-        macro_data = {
-            'name': name,
-            'steps': steps
-        }
-        
-        # Save to file
-        if not self.macro_path:
-            # New macro - parent should provide the path
-            self.macro_name = name
-            self.macro_data = macro_data
-            self.accept()
-        else:
-            try:
+        try:
+            name = self.name_input.text().strip()
+            if not name:
+                QMessageBox.warning(self, "Invalid Name", "Please enter a macro name.")
+                return
+            
+            if not self.canvas.blocks:
+                QMessageBox.warning(self, "Empty Macro", "Please add at least one block to the macro.")
+                return
+            
+            # Convert blocks to YAML structure
+            steps = self.canvas.to_yaml_list()
+            
+            if debug and debug.enabled:
+                debug.log(f"MacroEditor: Converted {len(steps)} blocks to YAML", "DEBUG")
+            
+            macro_data = {
+                'name': name,
+                'steps': steps
+            }
+            
+            # Save to file
+            if not self.macro_path:
+                # New macro - parent should provide the path
+                self.macro_name = name
+                self.macro_data = macro_data
+                if debug and debug.enabled:
+                    debug.log(f"MacroEditor: Macro data prepared for saving by parent", "DEBUG")
+                self.accept()
+            else:
                 with open(self.macro_path, 'w') as f:
                     yaml.dump(macro_data, f, default_flow_style=False, sort_keys=False)
+                
+                if debug and debug.enabled:
+                    debug.log(f"MacroEditor: Macro saved to {self.macro_path}", "INFO")
+                
                 QMessageBox.information(self, "Success", f"Macro '{name}' saved successfully!")
                 self.accept()
-            except Exception as e:
-                QMessageBox.critical(self, "Save Error", f"Failed to save macro: {e}")
+        
+        except yaml.YAMLError as e:
+            if debug and debug.enabled:
+                debug.log(f"MacroEditor: YAML serialization error: {e}", "ERROR")
+            QMessageBox.critical(self, "Save Error", f"Failed to serialize macro to YAML:\n{e}")
+        except IOError as e:
+            if debug and debug.enabled:
+                debug.log(f"MacroEditor: File I/O error: {e}", "ERROR")
+            QMessageBox.critical(self, "Save Error", f"Failed to write macro file:\n{e}")
+        except Exception as e:
+            if debug and debug.enabled:
+                debug.log(f"MacroEditor: Unexpected error saving macro: {e}", "ERROR")
+            QMessageBox.critical(self, "Save Error", f"Failed to save macro: {e}")
     
     def clear_macro(self):
         """Clear all blocks from the canvas"""

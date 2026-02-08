@@ -9,6 +9,7 @@ import yaml
 from datetime import datetime
 import time
 import threading
+import traceback
 from typing import Optional, Dict, Any, List
 from queue import Queue
 
@@ -17,9 +18,17 @@ from CommandsEditor import CommandsEditor
 from StyleManager import StyleManager
 from ThemesDialog import ThemesDialog
 from ManualDialog import ManualDialog
+from DebugHandler import DebugHandler, set_debug_handler, get_debug_handler
+from CrashReportDialog import CrashReportDialog
 
 # Application version
 __version__ = "2.5.0"
+
+# Debug mode configuration
+# Set to True to enable comprehensive debugging and crash reporting
+# Debug builds (version ending with 'd') will show console output
+DEBUG_ENABLED = __version__.endswith('d')  # Auto-detect debug builds
+IS_DEBUG = DEBUG_ENABLED  # Alias for compatibility
 
 # sip is uncommented in windows pyinstaller build
 # import sip
@@ -78,6 +87,10 @@ class SerialReaderThread(QThread):
         
     def run(self) -> None:
         """Main thread loop for reading serial data"""
+        debug = get_debug_handler()
+        if debug and debug.enabled:
+            debug.log("SerialReaderThread started", "DEBUG")
+            
         while self.running and self.serial_port and self.serial_port.is_open:
             try:
                 if self.serial_port.in_waiting > 0:
@@ -117,11 +130,17 @@ class SerialReaderThread(QThread):
                     # Small sleep to prevent CPU spinning
                     time.sleep(0.01)
             except Exception as e:
+                debug = get_debug_handler()
+                if debug and debug.enabled:
+                    debug.log(f"Exception in serial reader thread: {e}", "ERROR")
                 self.error_occurred.emit(str(e))
                 break
     
     def stop(self) -> None:
         """Stop the thread gracefully"""
+        debug = get_debug_handler()
+        if debug and debug.enabled:
+            debug.log("Stopping SerialReaderThread", "DEBUG")
         self.running = False
         self.wait()  # Wait for thread to finish
 
@@ -213,7 +232,24 @@ class MainWindow(QMainWindow):
         DTR/RTS toggles, and log count tracking. Disables certain controls until a serial connection is established.
         """
         super().__init__()
-        self.setWindowTitle("Serial Communication Monitor")
+        
+        # Initialize debug handler
+        log_dir = get_config_dir("SerialCommunicationMonitor") / "logs"
+        self.debug_handler = DebugHandler(
+            app_version=__version__,
+            enabled=DEBUG_ENABLED,
+            log_dir=log_dir
+        )
+        self.debug_handler.install_exception_handler()
+        set_debug_handler(self.debug_handler)
+        
+        if DEBUG_ENABLED:
+            self.debug_handler.log(f"Starting Serial Communication Monitor v{__version__}", "INFO")
+            self.debug_handler.log(f"Debug mode is ENABLED", "INFO")
+            self.setWindowTitle(f"Serial Communication Monitor v{__version__} [DEBUG]")
+        else:
+            self.setWindowTitle("Serial Communication Monitor")
+        
         self.resize(800, 600)
         
         # Set window icon for taskbar and title bar
@@ -1643,14 +1679,20 @@ class MainWindow(QMainWindow):
         self.set_style()
 
     def save_settings(self) -> None:
+        if DEBUG_ENABLED:
+            self.debug_handler.log("Saving settings to file", "DEBUG")
+            
         # Always update the version to track which app version last edited the settings
         self.settings['general']['app_version'] = __version__
         
         settings_file = os.path.join(self.app_configs_path, "settings.yaml")
         try:
-            with open(settings_file, "w") as f:
-                yaml.dump(self.settings, f, default_flow_style=False)
+            with self.debug_handler.capture_context("Save Settings"):
+                with open(settings_file, "w") as f:
+                    yaml.dump(self.settings, f, default_flow_style=False)
         except Exception as e:
+            if DEBUG_ENABLED:
+                self.debug_handler.log(f"Failed to save settings: {e}", "ERROR")
             QMessageBox.critical(self, "Save Error", f"Failed to save settings: {e}")
 
     def confirm_clear_history(self) -> None:
@@ -2047,11 +2089,21 @@ class MainWindow(QMainWindow):
         Loads settings from a YAML file and populates the configuration table.
         If the file does not exist, it initializes with default values.
         """
+        if DEBUG_ENABLED:
+            self.debug_handler.log("Loading settings from file", "DEBUG")
+            
         settings_file = os.path.join(self.app_configs_path, "settings.yaml")
         if os.path.exists(settings_file):
-            with open(settings_file, "r") as f:
-                settings = yaml.safe_load(f)
-                # print(f"Loaded settings: {settings}")
+            try:
+                with self.debug_handler.capture_context("Load Settings"):
+                    with open(settings_file, "r") as f:
+                        settings = yaml.safe_load(f)
+                        # print(f"Loaded settings: {settings}")
+            except Exception as e:
+                if DEBUG_ENABLED:
+                    self.debug_handler.log(f"Failed to load settings: {e}", "ERROR")
+                raise
+                
             if settings:
                 # Migrate from old 'buttons' to 'quick_buttons' format
                 if 'buttons' in settings and 'quick_buttons' not in settings:
@@ -2281,6 +2333,9 @@ class MainWindow(QMainWindow):
     def connect_serial(self) -> None:
         port = self.port_combo.currentText()
         baud_rate = self.baud_rate_combo.currentText()
+        
+        if DEBUG_ENABLED:
+            self.debug_handler.log(f"Attempting to connect to {port} at {baud_rate} baud", "INFO")
 
         if self.settings.get("general", {}).get("last-baudrate", 115200) != baud_rate:
             self.settings["general"]["last-baudrate"] = baud_rate
@@ -2296,44 +2351,50 @@ class MainWindow(QMainWindow):
         baud_rate = int(baud_rate)
 
         try:
-            if os.name == "posix":
-                fd = os.open(port, os.O_RDWR | os.O_NOCTTY | os.O_EXCL)
-                self.serial_port = serial.Serial()
-                self.serial_port.port = port
-                self.serial_port.baudrate = baud_rate
-                self.serial_port.timeout = 1
-                self.serial_port.open()
-                os.close(fd)
-            else:
-                self.serial_port = serial.Serial(port, baudrate=baud_rate, timeout=1)
+            with self.debug_handler.capture_context(f"Serial Connection to {port}"):
+                if os.name == "posix":
+                    fd = os.open(port, os.O_RDWR | os.O_NOCTTY | os.O_EXCL)
+                    self.serial_port = serial.Serial()
+                    self.serial_port.port = port
+                    self.serial_port.baudrate = baud_rate
+                    self.serial_port.timeout = 1
+                    self.serial_port.open()
+                    os.close(fd)
+                else:
+                    self.serial_port = serial.Serial(port, baudrate=baud_rate, timeout=1)
 
-            # Apply additional serial settings
-            self.apply_serial_settings()
+                # Apply additional serial settings
+                self.apply_serial_settings()
 
-            # Set DTR/RTS from settings
-            self.serial_port.dtr = self.settings.get('general', {}).get('dtr_state', False)
-            self.serial_port.rts = self.settings.get('general', {}).get('rts_state', False)
+                # Set DTR/RTS from settings
+                self.serial_port.dtr = self.settings.get('general', {}).get('dtr_state', False)
+                self.serial_port.rts = self.settings.get('general', {}).get('rts_state', False)
 
-            # Start the serial reader thread
-            self.serial_reader_thread = SerialReaderThread(self.serial_port)
-            self.serial_reader_thread.data_received.connect(self.handle_serial_data)
-            self.serial_reader_thread.error_occurred.connect(self.handle_serial_error)
-            self.serial_reader_thread.start()
+                # Start the serial reader thread
+                self.serial_reader_thread = SerialReaderThread(self.serial_port)
+                self.serial_reader_thread.data_received.connect(self.handle_serial_data)
+                self.serial_reader_thread.error_occurred.connect(self.handle_serial_error)
+                self.serial_reader_thread.start()
 
-            # Stop refreshing ports when connected
-            self.refresh_timer.stop()
-            self.update_connect_button_appearance()
-            self.update_serial_status("green", "Connected")
+                # Stop refreshing ports when connected
+                self.refresh_timer.stop()
+                self.update_connect_button_appearance()
+                self.update_serial_status("green", "Connected")
 
-            self.send_button.setDisabled(False)
+                self.send_button.setDisabled(False)
 
-            self.connected_time_seconds = 0
-            self.connected_time_timer.start(1000)
-            
-            # Display connection message
-            self.print_to_display(f"Serial connection established: {port} @ {baud_rate} baud")
+                self.connected_time_seconds = 0
+                self.connected_time_timer.start(1000)
+                
+                # Display connection message
+                self.print_to_display(f"Serial connection established: {port} @ {baud_rate} baud")
+                
+                if DEBUG_ENABLED:
+                    self.debug_handler.log(f"Successfully connected to {port}", "INFO")
 
         except Exception as e:
+            if DEBUG_ENABLED:
+                self.debug_handler.log(f"Connection failed: {e}", "ERROR")
             QMessageBox.critical(self, "Connection Error", str(e))
             self.update_serial_status("red", "Disconnected")
             self.send_button.setDisabled(True)
@@ -2341,18 +2402,30 @@ class MainWindow(QMainWindow):
                 self.response_display.clear()
 
     def disconnect_serial(self) -> None:
-        if self.serial_port:
-            # Stop the serial reader thread first
-            if self.serial_reader_thread:
-                self.serial_reader_thread.stop()
-                self.serial_reader_thread = None
+        if DEBUG_ENABLED:
+            self.debug_handler.log("Disconnecting serial port", "INFO")
             
-            # Stop timers
-            self.connected_time_timer.stop()
+        if self.serial_port:
+            try:
+                with self.debug_handler.capture_context("Serial Disconnection"):
+                    # Stop the serial reader thread first
+                    if self.serial_reader_thread:
+                        self.serial_reader_thread.stop()
+                        self.serial_reader_thread = None
+                    
+                    # Stop timers
+                    self.connected_time_timer.stop()
 
-            # Close the serial port
-            self.serial_port.close()
-            self.serial_port = None
+                    # Close the serial port
+                    self.serial_port.close()
+                    self.serial_port = None
+                    
+                    if DEBUG_ENABLED:
+                        self.debug_handler.log("Serial port closed successfully", "INFO")
+            except Exception as e:
+                if DEBUG_ENABLED:
+                    self.debug_handler.log(f"Error during disconnect: {e}", "ERROR")
+                raise
 
             # Resume refreshing ports when disconnected
             self.refresh_timer.start(1000)
@@ -2406,34 +2479,42 @@ class MainWindow(QMainWindow):
         
     def send_command(self) -> None:
         command = self.command_input.text().strip()
-        if self.serial_port and self.serial_port.is_open:
-            # Get the current line ending key
-            tx_key = self.settings['general']['tx_line_ending']
-
-            # Find the matching value from options
-            tx_value = next(
-                value for key, value in self.OPTIONS['tx_line_ending'] 
-                if key == tx_key
-            )
-            tx_value = tx_value.encode().decode("unicode_escape")
+        
+        if DEBUG_ENABLED:
+            self.debug_handler.log(f"Sending command: '{command}'", "DEBUG")
             
-            if command:
-                self.save_command(command)  # Save command to history
-                self.serial_port.write((command + str(tx_value)).encode())
-                # Show flow indicator if enabled
-                show_flow = self.settings.get("general", {}).get("show_flow_indicators", True)
-                if show_flow:
-                    self.print_to_display(f"< {command}")
-                else:
-                    self.print_to_display(command)
-            else:
-                # Send just the line ending when input is empty
-                self.serial_port.write(tx_value.encode())
-                # Only display empty line indicator if filter is disabled and flow indicators enabled
-                filter_empty = self.settings.get("general", {}).get("filter_empty_lines", False)
-                show_flow = self.settings.get("general", {}).get("show_flow_indicators", True)
-                if not filter_empty and show_flow:
-                    self.print_to_display("<")
+        if self.serial_port and self.serial_port.is_open:
+            try:
+                with self.debug_handler.capture_context("Send Command"):
+                    # Get the current line ending key
+                    tx_key = self.settings['general']['tx_line_ending']
+
+                    # Find the matching value from options
+                    tx_value = next(
+                        value for key, value in self.OPTIONS['tx_line_ending'] 
+                        if key == tx_key
+                    )
+                    tx_value = tx_value.encode().decode("unicode_escape")
+                    
+                    if command:
+                        self.save_command(command)  # Save command to history
+                        self.serial_port.write((command + str(tx_value)).encode())
+                        # Show flow indicator if enabled
+                        show_flow = self.settings.get("general", {}).get("show_flow_indicators", True)
+                        if show_flow:
+                            self.print_to_display(f"< {command}")
+                    else:
+                        # Send just the line ending when input is empty
+                        self.serial_port.write(tx_value.encode())
+                        # Only display empty line indicator if filter is disabled and flow indicators enabled
+                        filter_empty = self.settings.get("general", {}).get("filter_empty_lines", False)
+                        show_flow = self.settings.get("general", {}).get("show_flow_indicators", True)
+                        if not filter_empty and show_flow:
+                            self.print_to_display("<")
+            except Exception as e:
+                if DEBUG_ENABLED:
+                    self.debug_handler.log(f"Failed to send command: {e}", "ERROR")
+                raise
             
             self.command_input.clear()
 
@@ -2601,13 +2682,34 @@ class MainWindow(QMainWindow):
 
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    
-    # Set application icon for taskbar
-    icon_path = get_resource_path("images/icon.png")
-    if os.path.exists(icon_path):
-        app.setWindowIcon(QIcon(icon_path))
-    
-    window = MainWindow()
-    window.show()
-    sys.exit(app.exec_())
+    try:
+        app = QApplication(sys.argv)
+        
+        # Set application icon for taskbar
+        icon_path = get_resource_path("images/icon.png")
+        if os.path.exists(icon_path):
+            app.setWindowIcon(QIcon(icon_path))
+        
+        if DEBUG_ENABLED:
+            print(f"="*60)
+            print(f"Starting Serial Communication Monitor v{__version__}")
+            print(f"Debug Mode: ENABLED")
+            print(f"Crash reports will be saved to: {get_config_dir('SerialCommunicationMonitor') / 'logs'}")
+            print(f"="*60)
+            print()
+        
+        window = MainWindow()
+        window.show()
+        sys.exit(app.exec_())
+        
+    except Exception as e:
+        # This catches any exceptions during startup
+        print(f"\nFATAL ERROR during application startup:")
+        print(f"Exception: {type(e).__name__}: {e}")
+        print(f"\nTraceback:")
+        traceback.print_exc()
+        
+        if DEBUG_ENABLED:
+            print(f"\nPlease report this issue with the above information.")
+        
+        sys.exit(1)
