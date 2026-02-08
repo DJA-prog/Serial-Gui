@@ -1,8 +1,19 @@
+<div align="center">
+
 # Serial Communication Monitor
+
+![Version](https://img.shields.io/badge/version-2.5.0-blue.svg)
+![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)
+![PyQt5](https://img.shields.io/badge/PyQt5-5.15+-green.svg)
+![Status](https://img.shields.io/badge/status-active-success.svg)
 
 A modern, cross-platform serial monitor application built with PyQt5. This tool provides a powerful and user-friendly interface for interacting with serial devices, managing commands, executing macros, and viewing responses in real time.
 
-![Preview](images/V2.2.0_preview.png)
+![Preview](images/V2.5.0_preview.png)
+
+</div>
 
 ## Tested Platforms
 
