@@ -9,6 +9,15 @@ from typing import Dict, Any, Optional, TYPE_CHECKING
 if TYPE_CHECKING:
     from StyleManager import StyleManager
 
+# Import debug handler
+try:
+    from DebugHandler import get_debug_handler
+    DEBUG_ENABLED = True
+except:
+    DEBUG_ENABLED = False
+    def get_debug_handler():
+        return None
+
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QLabel,
     QLineEdit, QScrollArea, QMessageBox, QListWidget, QListWidgetItem,
@@ -22,26 +31,40 @@ class CommandsEditor(QDialog):
     
     def __init__(self, parent=None, config_path: Optional[Path] = None, style_manager: Optional['StyleManager'] = None):
         super().__init__(parent)
-        self.style_manager = style_manager
-        self.config_path = config_path or Path.home() / ".config" / "SerialCommunicationMonitor"
-        self.commands_dir = self.config_path / "commands"
-        self.commands_dir.mkdir(parents=True, exist_ok=True)
         
-        self.current_file: Optional[str] = None
-        self.no_input_commands: Dict[str, str] = {}
-        self.input_required_commands: Dict[str, str] = {}
+        debug = get_debug_handler()
+        if debug and debug.enabled:
+            debug.log("CommandsEditor: Initializing", "DEBUG")
         
-        # Track unsaved changes
-        self.has_unsaved_changes = False
-        self.initial_state: Optional[Dict[str, Any]] = None
+        try:
+            self.style_manager = style_manager
+            self.config_path = config_path or Path.home() / ".config" / "SerialCommunicationMonitor"
+            self.commands_dir = self.config_path / "commands"
+            self.commands_dir.mkdir(parents=True, exist_ok=True)
+            
+            self.current_file: Optional[str] = None
+            self.no_input_commands: Dict[str, str] = {}
+            self.input_required_commands: Dict[str, str] = {}
+            
+            # Track unsaved changes
+            self.has_unsaved_changes = False
+            self.initial_state: Optional[Dict[str, Any]] = None
+            
+            self.setWindowTitle("Commands Editor")
+            self.resize(900, 700)
+            self.setup_ui()
+            self.apply_style()
+            
+            # Store initial state after setup
+            self.initial_state = self.get_current_state()
+            
+            if debug and debug.enabled:
+                debug.log("CommandsEditor: Initialization complete", "DEBUG")
         
-        self.setWindowTitle("Commands Editor")
-        self.resize(900, 700)
-        self.setup_ui()
-        self.apply_style()
-        
-        # Store initial state after setup
-        self.initial_state = self.get_current_state()
+        except Exception as e:
+            if debug and debug.enabled:
+                debug.log(f"CommandsEditor: Initialization error: {e}", "ERROR")
+            raise
     
     def setup_ui(self):
         """Setup the main UI layout"""
@@ -167,151 +190,211 @@ class CommandsEditor(QDialog):
     
     def add_no_input_command(self):
         """Add a new command to the no input list"""
-        command, ok1 = QInputDialog.getText(
-            self, "Add Command", "Enter command (e.g., AT, ATE0):"
-        )
-        if not ok1 or not command.strip():
-            return
+        debug = get_debug_handler()
+        try:
+            command, ok1 = QInputDialog.getText(
+                self, "Add Command", "Enter command (e.g., AT, ATE0):"
+            )
+            if not ok1 or not command.strip():
+                return
+            
+            description, ok2 = QInputDialog.getText(
+                self, "Add Description", "Enter description:"
+            )
+            if not ok2:
+                return
+            
+            self.no_input_commands[command.strip()] = description.strip()
+            self.refresh_lists()
+            self.mark_as_changed()
+            
+            if debug and debug.enabled:
+                debug.log(f"CommandsEditor: Added no-input command '{command.strip()}'", "DEBUG")
         
-        description, ok2 = QInputDialog.getText(
-            self, "Add Description", "Enter description:"
-        )
-        if not ok2:
-            return
-        
-        self.no_input_commands[command.strip()] = description.strip()
-        self.refresh_lists()
-        self.mark_as_changed()
+        except Exception as e:
+            if debug and debug.enabled:
+                debug.log(f"CommandsEditor: Error adding no-input command: {e}", "ERROR")
+            QMessageBox.critical(self, "Error", f"Failed to add command:\n{e}")
     
     def edit_no_input_command(self):
         """Edit selected command in no input list"""
-        current_item = self.no_input_list.currentItem()
-        if not current_item:
-            QMessageBox.warning(self, "No Selection", "Please select a command to edit.")
-            return
+        debug = get_debug_handler()
+        try:
+            current_item = self.no_input_list.currentItem()
+            if not current_item:
+                QMessageBox.warning(self, "No Selection", "Please select a command to edit.")
+                return
+            
+            # Parse current command and description
+            item_text = current_item.text()
+            if " - " in item_text:
+                old_command, old_description = item_text.split(" - ", 1)
+            else:
+                old_command = item_text
+                old_description = ""
+            
+            # Edit command
+            command, ok1 = QInputDialog.getText(
+                self, "Edit Command", "Edit command:", text=old_command
+            )
+            if not ok1 or not command.strip():
+                return
+            
+            # Edit description
+            description, ok2 = QInputDialog.getText(
+                self, "Edit Description", "Edit description:", text=old_description
+            )
+            if not ok2:
+                return
+            
+            # Remove old entry
+            if old_command in self.no_input_commands:
+                del self.no_input_commands[old_command]
+            
+            # Add updated entry
+            self.no_input_commands[command.strip()] = description.strip()
+            self.refresh_lists()
+            self.mark_as_changed()
+            
+            if debug and debug.enabled:
+                debug.log(f"CommandsEditor: Edited no-input command '{old_command}' -> '{command.strip()}'", "DEBUG")
         
-        # Parse current command and description
-        item_text = current_item.text()
-        if " - " in item_text:
-            old_command, old_description = item_text.split(" - ", 1)
-        else:
-            old_command = item_text
-            old_description = ""
-        
-        # Edit command
-        command, ok1 = QInputDialog.getText(
-            self, "Edit Command", "Edit command:", text=old_command
-        )
-        if not ok1 or not command.strip():
-            return
-        
-        # Edit description
-        description, ok2 = QInputDialog.getText(
-            self, "Edit Description", "Edit description:", text=old_description
-        )
-        if not ok2:
-            return
-        
-        # Remove old entry
-        if old_command in self.no_input_commands:
-            del self.no_input_commands[old_command]
-        
-        # Add updated entry
-        self.no_input_commands[command.strip()] = description.strip()
-        self.refresh_lists()
-        self.mark_as_changed()
+        except Exception as e:
+            if debug and debug.enabled:
+                debug.log(f"CommandsEditor: Error editing no-input command: {e}", "ERROR")
+            QMessageBox.critical(self, "Error", f"Failed to edit command:\n{e}")
     
     def remove_no_input_command(self):
         """Remove selected command from no input list"""
-        current_item = self.no_input_list.currentItem()
-        if not current_item:
-            QMessageBox.warning(self, "No Selection", "Please select a command to remove.")
-            return
+        debug = get_debug_handler()
+        try:
+            current_item = self.no_input_list.currentItem()
+            if not current_item:
+                QMessageBox.warning(self, "No Selection", "Please select a command to remove.")
+                return
+            
+            item_text = current_item.text()
+            if " - " in item_text:
+                command = item_text.split(" - ")[0]
+            else:
+                command = item_text
+            
+            if command in self.no_input_commands:
+                del self.no_input_commands[command]
+                self.refresh_lists()
+                self.mark_as_changed()
+                
+                if debug and debug.enabled:
+                    debug.log(f"CommandsEditor: Removed no-input command '{command}'", "DEBUG")
         
-        item_text = current_item.text()
-        if " - " in item_text:
-            command = item_text.split(" - ")[0]
-        else:
-            command = item_text
-        
-        if command in self.no_input_commands:
-            del self.no_input_commands[command]
-            self.refresh_lists()
-            self.mark_as_changed()
+        except Exception as e:
+            if debug and debug.enabled:
+                debug.log(f"CommandsEditor: Error removing command: {e}", "ERROR")
+            QMessageBox.critical(self, "Error", f"Failed to remove command:\n{e}")
     
     def add_input_required_command(self):
         """Add a new command to the input required list"""
-        command, ok1 = QInputDialog.getText(
-            self, "Add Command", "Enter command template (e.g., AT+CMGS=\"<number>\"):"
-        )
-        if not ok1 or not command.strip():
-            return
+        debug = get_debug_handler()
+        try:
+            command, ok1 = QInputDialog.getText(
+                self, "Add Command", "Enter command template (e.g., AT+CMGS=\"<number>\"):"
+            )
+            if not ok1 or not command.strip():
+                return
+            
+            description, ok2 = QInputDialog.getText(
+                self, "Add Description", "Enter description:"
+            )
+            if not ok2:
+                return
+            
+            self.input_required_commands[command.strip()] = description.strip()
+            self.refresh_lists()
+            self.mark_as_changed()
+            
+            if debug and debug.enabled:
+                debug.log(f"CommandsEditor: Added input-required command '{command.strip()}'", "DEBUG")
         
-        description, ok2 = QInputDialog.getText(
-            self, "Add Description", "Enter description:"
-        )
-        if not ok2:
-            return
-        
-        self.input_required_commands[command.strip()] = description.strip()
-        self.refresh_lists()
-        self.mark_as_changed()
+        except Exception as e:
+            if debug and debug.enabled:
+                debug.log(f"CommandsEditor: Error adding input-required command: {e}", "ERROR")
+            QMessageBox.critical(self, "Error", f"Failed to add command:\n{e}")
     
     def edit_input_required_command(self):
         """Edit selected command in input required list"""
-        current_item = self.input_required_list.currentItem()
-        if not current_item:
-            QMessageBox.warning(self, "No Selection", "Please select a command to edit.")
-            return
+        debug = get_debug_handler()
+        try:
+            current_item = self.input_required_list.currentItem()
+            if not current_item:
+                QMessageBox.warning(self, "No Selection", "Please select a command to edit.")
+                return
+            
+            # Parse current command and description
+            item_text = current_item.text()
+            if " - " in item_text:
+                old_command, old_description = item_text.split(" - ", 1)
+            else:
+                old_command = item_text
+                old_description = ""
+            
+            # Edit command
+            command, ok1 = QInputDialog.getText(
+                self, "Edit Command", "Edit command:", text=old_command
+            )
+            if not ok1 or not command.strip():
+                return
+            
+            # Edit description
+            description, ok2 = QInputDialog.getText(
+                self, "Edit Description", "Edit description:", text=old_description
+            )
+            if not ok2:
+                return
+            
+            # Remove old entry
+            if old_command in self.input_required_commands:
+                del self.input_required_commands[old_command]
+            
+            # Add updated entry
+            self.input_required_commands[command.strip()] = description.strip()
+            self.refresh_lists()
+            self.mark_as_changed()
+            
+            if debug and debug.enabled:
+                debug.log(f"CommandsEditor: Edited input-required command '{old_command}' -> '{command.strip()}'", "DEBUG")
         
-        # Parse current command and description
-        item_text = current_item.text()
-        if " - " in item_text:
-            old_command, old_description = item_text.split(" - ", 1)
-        else:
-            old_command = item_text
-            old_description = ""
-        
-        # Edit command
-        command, ok1 = QInputDialog.getText(
-            self, "Edit Command", "Edit command:", text=old_command
-        )
-        if not ok1 or not command.strip():
-            return
-        
-        # Edit description
-        description, ok2 = QInputDialog.getText(
-            self, "Edit Description", "Edit description:", text=old_description
-        )
-        if not ok2:
-            return
-        
-        # Remove old entry
-        if old_command in self.input_required_commands:
-            del self.input_required_commands[old_command]
-        
-        # Add updated entry
-        self.input_required_commands[command.strip()] = description.strip()
-        self.refresh_lists()
-        self.mark_as_changed()
+        except Exception as e:
+            if debug and debug.enabled:
+                debug.log(f"CommandsEditor: Error editing input-required command: {e}", "ERROR")
+            QMessageBox.critical(self, "Error", f"Failed to edit command:\n{e}")
     
     def remove_input_required_command(self):
         """Remove selected command from input required list"""
-        current_item = self.input_required_list.currentItem()
-        if not current_item:
-            QMessageBox.warning(self, "No Selection", "Please select a command to remove.")
-            return
+        debug = get_debug_handler()
+        try:
+            current_item = self.input_required_list.currentItem()
+            if not current_item:
+                QMessageBox.warning(self, "No Selection", "Please select a command to remove.")
+                return
+            
+            item_text = current_item.text()
+            if " - " in item_text:
+                command = item_text.split(" - ")[0]
+            else:
+                command = item_text
+            
+            if command in self.input_required_commands:
+                del self.input_required_commands[command]
+                self.refresh_lists()
+                self.mark_as_changed()
+                
+                if debug and debug.enabled:
+                    debug.log(f"CommandsEditor: Removed input-required command '{command}'", "DEBUG")
         
-        item_text = current_item.text()
-        if " - " in item_text:
-            command = item_text.split(" - ")[0]
-        else:
-            command = item_text
-        
-        if command in self.input_required_commands:
-            del self.input_required_commands[command]
-            self.refresh_lists()
-            self.mark_as_changed()
+        except Exception as e:
+            if debug and debug.enabled:
+                debug.log(f"CommandsEditor: Error removing input-required command: {e}", "ERROR")
+            QMessageBox.critical(self, "Error", f"Failed to remove command:\n{e}")
     
     def refresh_lists(self):
         """Refresh both list widgets with current data"""
@@ -327,23 +410,25 @@ class CommandsEditor(QDialog):
     
     def save_file(self):
         """Save current commands to file"""
-        # If no current file, ask for filename
-        if not self.current_file:
-            filename, ok = QInputDialog.getText(
-                self, "Save As", "Enter filename (without .yaml):"
-            )
-            if not ok or not filename.strip():
-                return
-            
-            # Sanitize filename
-            filename = filename.strip()
-            if not filename.endswith('.yaml'):
-                filename += '.yaml'
-            
-            self.current_file = filename
-        
-        filepath = self.commands_dir / self.current_file
+        debug = get_debug_handler()
         try:
+            # If no current file, ask for filename
+            if not self.current_file:
+                filename, ok = QInputDialog.getText(
+                    self, "Save As", "Enter filename (without .yaml):"
+                )
+                if not ok or not filename.strip():
+                    return
+                
+                # Sanitize filename
+                filename = filename.strip()
+                if not filename.endswith('.yaml'):
+                    filename += '.yaml'
+                
+                self.current_file = filename
+            
+            filepath = self.commands_dir / self.current_file
+            
             data = {
                 'no_input_commands': self.no_input_commands,
                 'input_required_commands': self.input_required_commands
@@ -360,5 +445,19 @@ class CommandsEditor(QDialog):
             # Reset change tracking after successful save
             self.has_unsaved_changes = False
             self.initial_state = self.get_current_state()
+            
+            if debug and debug.enabled:
+                debug.log(f"CommandsEditor: Saved commands to {self.current_file}", "INFO")
+        
+        except yaml.YAMLError as e:
+            if debug and debug.enabled:
+                debug.log(f"CommandsEditor: YAML error saving file: {e}", "ERROR")
+            QMessageBox.critical(self, "Error", f"Failed to save file (YAML error):\n{e}")
+        except IOError as e:
+            if debug and debug.enabled:
+                debug.log(f"CommandsEditor: I/O error saving file: {e}", "ERROR")
+            QMessageBox.critical(self, "Error", f"Failed to save file (I/O error):\n{e}")
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to save file: {e}")
+            if debug and debug.enabled:
+                debug.log(f"CommandsEditor: Unexpected error saving file: {e}", "ERROR")
+            QMessageBox.critical(self, "Error", f"Failed to save file:\n{e}")
