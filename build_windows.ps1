@@ -108,15 +108,30 @@ if ($BuildMode -eq 'debug') {
 } else {
     # Release mode: No console window (GUI only)
     $buildCommand += "--windowed"
-    Write-Host "Release mode: GUI-only execut ($buildType)" -ForegroundColor Green
+    Write-Host "Release mode: GUI-only executable" -ForegroundColor Green
+}
+
+# Add the main Python file
+$buildCommand += "App.py"
+
+# Execute the build command
+Write-Host "Running PyInstaller..." -ForegroundColor Yellow
+$commandString = $buildCommand -join " "
+Invoke-Expression $commandString
+
+# Check if build succeeded
+if ($LASTEXITCODE -eq 0) {
+    Write-Host ""
+    Write-Host "=====================================================" -ForegroundColor Green
+    Write-Host "Build completed successfully! ($buildType)" -ForegroundColor Green
     Write-Host "=====================================================" -ForegroundColor Green
     Write-Host ""
     Write-Host "Executable location: dist\Serial_monitor_" + $versionSuffix + "_x86-64.exe" -ForegroundColor Cyan
     Write-Host ""
     
     # Display file size
-    if (Test-Path "dist\Serial_monitor_" + $versionSuffix + "_x86-64.exe") {
-        $fileSize = (Get-Item "dist\Serial_monitor_" + $versionSuffix + "_x86-64.exe").Length / 1MB
+    if (Test-Path "dist\Serial_monitor_$versionSuffix_x86-64.exe") {
+        $fileSize = (Get-Item "dist\Serial_monitor_$versionSuffix_x86-64.exe").Length / 1MB
         Write-Host "File size: $([math]::Round($fileSize, 2)) MB" -ForegroundColor Yellow
         Write-Host ""
         
@@ -124,24 +139,11 @@ if ($BuildMode -eq 'debug') {
             Write-Host "Debug build notes:" -ForegroundColor Yellow
             Write-Host "  - Console window will be visible for debugging" -ForegroundColor Gray
             Write-Host "  - Version suffix includes 'd' ($versionSuffix)" -ForegroundColor Gray
+            Write-Host "  - Debug logging enabled in application" -ForegroundColor Gray
         } else {
             Write-Host "You can now distribute the .exe file independently." -ForegroundColor White
             Write-Host "Note: First run may create config directory in %APPDATA%\SerialCommunicationMonitor" -ForegroundColor Gray
         }
-    Write-Host "=====================================================" -ForegroundColor Green
-    Write-Host "Build completed successfully!" -ForegroundColor Green
-    Write-Host "=====================================================" -ForegroundColor Green
-    Write-Host ""
-    Write-Host "Executable location: dist\Serial_monitor_" + $version + "_x86-64.exe" -ForegroundColor Cyan
-    Write-Host ""
-    
-    # Display file size
-    if (Test-Path "dist\Serial_monitor_" + $version + "_x86-64.exe") {
-        $fileSize = (Get-Item "dist\Serial_monitor_" + $version + "_x86-64.exe").Length / 1MB
-        Write-Host "File size: $([math]::Round($fileSize, 2)) MB" -ForegroundColor Yellow
-        Write-Host ""
-        Write-Host "You can now distribute the .exe file independently." -ForegroundColor White
-        Write-Host "Note: First run may create config directory in %APPDATA%\SerialCommunicationMonitor" -ForegroundColor Gray
     }
 } else {
     Write-Host ""
