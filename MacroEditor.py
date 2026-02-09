@@ -221,8 +221,15 @@ class OutputBlock(MacroBlock):
         
         super().__init__("output", "Expect Output", parent, accent_color, hover_color, background_color)
         
-        # Set values after all widgets are created
+        # Block signals during initialization to prevent crashes on Windows
         try:
+            # Block combo box signals
+            if hasattr(self, 'fail_action_combo') and self.fail_action_combo is not None:
+                self.fail_action_combo.blockSignals(True)
+            if hasattr(self, 'success_action_combo') and self.success_action_combo is not None:
+                self.success_action_combo.blockSignals(True)
+            
+            # Set values after all widgets are created
             if hasattr(self, 'expected_input') and self.expected_input is not None:
                 self.expected_input.setText(expected)
             if hasattr(self, 'timeout_spinbox') and self.timeout_spinbox is not None:
@@ -232,6 +239,9 @@ class OutputBlock(MacroBlock):
             if hasattr(self, 'fail_action_combo') and self.fail_action_combo is not None:
                 if fail_action in ["Ignore", "Continue", "Exit Macro", "Custom Command", "Dialog for Command", "Dialog and Wait"]:
                     self.fail_action_combo.setCurrentText(fail_action)
+                    # Update visibility immediately without signal
+                    if hasattr(self, 'fail_command_input') and self.fail_command_input is not None:
+                        self.fail_command_input.setVisible(fail_action == "Custom Command")
             
             if hasattr(self, 'fail_command_input') and self.fail_command_input is not None and fail_command:
                 self.fail_command_input.setText(fail_command)
@@ -240,6 +250,9 @@ class OutputBlock(MacroBlock):
             if hasattr(self, 'success_action_combo') and self.success_action_combo is not None:
                 if success_action in ["Ignore", "Continue", "Exit Macro", "Custom Command", "Dialog for Command", "Dialog and Wait"]:
                     self.success_action_combo.setCurrentText(success_action)
+                    # Update visibility immediately without signal
+                    if hasattr(self, 'success_command_input') and self.success_command_input is not None:
+                        self.success_command_input.setVisible(success_action == "Custom Command")
             
             if hasattr(self, 'success_command_input') and self.success_command_input is not None and success_command:
                 self.success_command_input.setText(success_command)
@@ -250,7 +263,15 @@ class OutputBlock(MacroBlock):
         except Exception as e:
             print(f"OutputBlock initialization error: {e}")
         finally:
-            # Initialization complete, enable signal handling
+            # Unblock signals now that initialization is complete
+            try:
+                if hasattr(self, 'fail_action_combo') and self.fail_action_combo is not None:
+                    self.fail_action_combo.blockSignals(False)
+                if hasattr(self, 'success_action_combo') and self.success_action_combo is not None:
+                    self.success_action_combo.blockSignals(False)
+            except Exception as e:
+                print(f"OutputBlock signal unblock error: {e}")
+            # Initialization complete
             self._initializing = False
     
     def setup_block_content(self, layout: QHBoxLayout):
@@ -319,12 +340,19 @@ class OutputBlock(MacroBlock):
 
         layout.addLayout(layout_last)
         
-        # Connect signals AFTER all widgets are created
+        # Connect signals AFTER all widgets are created with additional safety checks
         try:
             if hasattr(self, 'success_action_combo') and self.success_action_combo is not None:
-                self.success_action_combo.currentTextChanged.connect(self.on_success_action_changed)
+                # Verify the widget is fully initialized before connecting
+                if hasattr(self.success_action_combo, 'currentTextChanged'):
+                    self.success_action_combo.currentTextChanged.connect(self.on_success_action_changed)
             if hasattr(self, 'fail_action_combo') and self.fail_action_combo is not None:
-                self.fail_action_combo.currentTextChanged.connect(self.on_fail_action_changed)
+                # Verify the widget is fully initialized before connecting
+                if hasattr(self.fail_action_combo, 'currentTextChanged'):
+                    self.fail_action_combo.currentTextChanged.connect(self.on_fail_action_changed)
+        except RuntimeError as e:
+            # Handle C++ wrapped object deletion issues on Windows
+            print(f"OutputBlock signal connection RuntimeError: {e}")
         except Exception as e:
             print(f"OutputBlock signal connection error: {e}")
     
@@ -336,7 +364,12 @@ class OutputBlock(MacroBlock):
         
         try:
             if hasattr(self, 'success_command_input') and self.success_command_input is not None:
-                self.success_command_input.setVisible(text == "Custom Command")
+                # Verify widget still exists (not deleted by Qt)
+                try:
+                    self.success_command_input.setVisible(text == "Custom Command")
+                except RuntimeError:
+                    # Widget was deleted, probably during cleanup
+                    pass
         except Exception as e:
             print(f"Error in on_success_action_changed: {e}")
     
@@ -348,7 +381,12 @@ class OutputBlock(MacroBlock):
         
         try:
             if hasattr(self, 'fail_command_input') and self.fail_command_input is not None:
-                self.fail_command_input.setVisible(text == "Custom Command")
+                # Verify widget still exists (not deleted by Qt)
+                try:
+                    self.fail_command_input.setVisible(text == "Custom Command")
+                except RuntimeError:
+                    # Widget was deleted, probably during cleanup
+                    pass
         except Exception as e:
             print(f"Error in on_fail_action_changed: {e}")
     
@@ -357,47 +395,78 @@ class OutputBlock(MacroBlock):
         try:
             result: Dict[str, Any] = {
                 "output": {
-                    "expected": self.expected_input.text() if hasattr(self, 'expected_input') and self.expected_input else "",
-                    "timeout": self.timeout_spinbox.value() if hasattr(self, 'timeout_spinbox') and self.timeout_spinbox else 1000,
-                    "substring_match": self.substring_match_checkbox.isChecked() if hasattr(self, 'substring_match_checkbox') and self.substring_match_checkbox else True
+                    "expected": "",
+                    "timeout": 1000,
+                    "substring_match": True
                 }
             }
             
+            # Safely get values with RuntimeError protection
+            try:
+                if hasattr(self, 'expected_input') and self.expected_input is not None:
+                    result["output"]["expected"] = self.expected_input.text()
+            except RuntimeError:
+                pass  # Widget deleted
+            
+            try:
+                if hasattr(self, 'timeout_spinbox') and self.timeout_spinbox is not None:
+                    result["output"]["timeout"] = self.timeout_spinbox.value()
+            except RuntimeError:
+                pass  # Widget deleted
+            
+            try:
+                if hasattr(self, 'substring_match_checkbox') and self.substring_match_checkbox is not None:
+                    result["output"]["substring_match"] = self.substring_match_checkbox.isChecked()
+            except RuntimeError:
+                pass  # Widget deleted
+            
             # Handle success action
-            if hasattr(self, 'success_action_combo') and self.success_action_combo is not None:
-                success_action = self.success_action_combo.currentText()
-                if success_action == "Ignore":
-                    result["output"]["success"] = "IGNORE"
-                elif success_action == "Exit Macro":
-                    result["output"]["success"] = "EXIT"
-                elif success_action == "Custom Command":
-                    if hasattr(self, 'success_command_input') and self.success_command_input is not None:
-                        cmd = self.success_command_input.text()
-                        if cmd:
-                            result["output"]["success"] = {"input": cmd}
-                elif success_action == "Dialog for Command":
-                    result["output"]["success"] = "DIALOG"
-                elif success_action == "Dialog and Wait":
-                    result["output"]["success"] = "DIALOG_WAIT"
-                # Continue is default, no need to add it
+            try:
+                if hasattr(self, 'success_action_combo') and self.success_action_combo is not None:
+                    success_action = self.success_action_combo.currentText()
+                    if success_action == "Ignore":
+                        result["output"]["success"] = "IGNORE"
+                    elif success_action == "Exit Macro":
+                        result["output"]["success"] = "EXIT"
+                    elif success_action == "Custom Command":
+                        if hasattr(self, 'success_command_input') and self.success_command_input is not None:
+                            try:
+                                cmd = self.success_command_input.text()
+                                if cmd:
+                                    result["output"]["success"] = {"input": cmd}
+                            except RuntimeError:
+                                pass  # Widget deleted
+                    elif success_action == "Dialog for Command":
+                        result["output"]["success"] = "DIALOG"
+                    elif success_action == "Dialog and Wait":
+                        result["output"]["success"] = "DIALOG_WAIT"
+                    # Continue is default, no need to add it
+            except RuntimeError:
+                pass  # Widget deleted
             
             # Handle fail action
-            if hasattr(self, 'fail_action_combo') and self.fail_action_combo is not None:
-                fail_action = self.fail_action_combo.currentText()
-                if fail_action == "Ignore":
-                    result["output"]["fail"] = "IGNORE"
-                elif fail_action == "Exit Macro":
-                    result["output"]["fail"] = "EXIT"
-                elif fail_action == "Custom Command":
-                    if hasattr(self, 'fail_command_input') and self.fail_command_input is not None:
-                        cmd = self.fail_command_input.text()
-                        if cmd:
-                            result["output"]["fail"] = {"input": cmd}
-                elif fail_action == "Dialog for Command":
-                    result["output"]["fail"] = "DIALOG"
-                elif fail_action == "Dialog and Wait":
-                    result["output"]["fail"] = "DIALOG_WAIT"
-                # Continue is default, no need to add it
+            try:
+                if hasattr(self, 'fail_action_combo') and self.fail_action_combo is not None:
+                    fail_action = self.fail_action_combo.currentText()
+                    if fail_action == "Ignore":
+                        result["output"]["fail"] = "IGNORE"
+                    elif fail_action == "Exit Macro":
+                        result["output"]["fail"] = "EXIT"
+                    elif fail_action == "Custom Command":
+                        if hasattr(self, 'fail_command_input') and self.fail_command_input is not None:
+                            try:
+                                cmd = self.fail_command_input.text()
+                                if cmd:
+                                    result["output"]["fail"] = {"input": cmd}
+                            except RuntimeError:
+                                pass  # Widget deleted
+                    elif fail_action == "Dialog for Command":
+                        result["output"]["fail"] = "DIALOG"
+                    elif fail_action == "Dialog and Wait":
+                        result["output"]["fail"] = "DIALOG_WAIT"
+                    # Continue is default, no need to add it
+            except RuntimeError:
+                pass  # Widget deleted
             
             return result
         except Exception as e:
