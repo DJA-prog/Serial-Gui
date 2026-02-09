@@ -4,3 +4,10 @@ serial-monitor.desktop
 SerialCommunicationMonitor
 TEMP
 __pycache__
+dist
+build
+*.log
+*.spec
+logs
+*.bak
+*.tmp
