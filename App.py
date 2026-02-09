@@ -19,9 +19,9 @@ from ThemesDialog import ThemesDialog
 from ManualDialog import ManualDialog
 
 # Application version
-__version__ = "2.4.0"
+__version__ = "2.4.1"
 
-# sip is uncommented in windows pyinstaller build
+# sip is uncommented in pyinstaller build
 # import sip
 
 from PyQt5.QtWidgets import (

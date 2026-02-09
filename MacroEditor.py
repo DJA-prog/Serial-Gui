@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QLabel,
     QLineEdit, QScrollArea, QMessageBox, QSpinBox, QComboBox, QFrame,
-    QSizePolicy, QCheckBox
+    QSizePolicy, QCheckBox, QApplication
 )
 from PyQt5.QtCore import Qt, QMimeData, QPoint
 from PyQt5.QtGui import QDrag, QPalette, QColor, QMouseEvent, QDragEnterEvent, QDropEvent
@@ -216,63 +216,33 @@ class OutputBlock(MacroBlock):
                  success_action: str = "Continue", success_command: str = "",
                  substring_match: bool = True,
                  accent_color: str = "#1E90FF", hover_color: str = "#63B8FF", background_color: str = "#1E1E1E"):
+        
         # Initialize flag to prevent signal handling during setup
         self._initializing = True
+        self._combo_initialized = False
         
         super().__init__("output", "Expect Output", parent, accent_color, hover_color, background_color)
         
-        # Block signals during initialization to prevent crashes on Windows
-        try:
-            # Block combo box signals
-            if hasattr(self, 'fail_action_combo') and self.fail_action_combo is not None:
-                self.fail_action_combo.blockSignals(True)
-            if hasattr(self, 'success_action_combo') and self.success_action_combo is not None:
-                self.success_action_combo.blockSignals(True)
-            
-            # Set values after all widgets are created
-            if hasattr(self, 'expected_input') and self.expected_input is not None:
-                self.expected_input.setText(expected)
-            if hasattr(self, 'timeout_spinbox') and self.timeout_spinbox is not None:
-                self.timeout_spinbox.setValue(timeout)
-            
-            # Set fail action after widgets are created
-            if hasattr(self, 'fail_action_combo') and self.fail_action_combo is not None:
-                if fail_action in ["Ignore", "Continue", "Exit Macro", "Custom Command", "Dialog for Command", "Dialog and Wait"]:
-                    self.fail_action_combo.setCurrentText(fail_action)
-                    # Update visibility immediately without signal
-                    if hasattr(self, 'fail_command_input') and self.fail_command_input is not None:
-                        self.fail_command_input.setVisible(fail_action == "Custom Command")
-            
-            if hasattr(self, 'fail_command_input') and self.fail_command_input is not None and fail_command:
-                self.fail_command_input.setText(fail_command)
-            
-            # Set success action
-            if hasattr(self, 'success_action_combo') and self.success_action_combo is not None:
-                if success_action in ["Ignore", "Continue", "Exit Macro", "Custom Command", "Dialog for Command", "Dialog and Wait"]:
-                    self.success_action_combo.setCurrentText(success_action)
-                    # Update visibility immediately without signal
-                    if hasattr(self, 'success_command_input') and self.success_command_input is not None:
-                        self.success_command_input.setVisible(success_action == "Custom Command")
-            
-            if hasattr(self, 'success_command_input') and self.success_command_input is not None and success_command:
-                self.success_command_input.setText(success_command)
-            
-            # Set substring match checkbox
-            if hasattr(self, 'substring_match_checkbox') and self.substring_match_checkbox is not None:
-                self.substring_match_checkbox.setChecked(substring_match)
-        except Exception as e:
-            print(f"OutputBlock initialization error: {e}")
-        finally:
-            # Unblock signals now that initialization is complete
-            try:
-                if hasattr(self, 'fail_action_combo') and self.fail_action_combo is not None:
-                    self.fail_action_combo.blockSignals(False)
-                if hasattr(self, 'success_action_combo') and self.success_action_combo is not None:
-                    self.success_action_combo.blockSignals(False)
-            except Exception as e:
-                print(f"OutputBlock signal unblock error: {e}")
-            # Initialization complete
-            self._initializing = False
+        # Store initialization values
+        self._init_values = {
+            'expected': expected,
+            'timeout': timeout,
+            'fail_action': fail_action,
+            'fail_command': fail_command,
+            'success_action': success_action,
+            'success_command': success_command,
+            'substring_match': substring_match
+        }
+        
+        # Mark combo boxes as not yet initialized
+        self._combo_initialized = False
+        
+        # Force immediate update of the UI
+        if self.parent():
+            self.parent().repaint()
+        
+        # Initialization complete
+        self._initializing = False
     
     def setup_block_content(self, layout: QHBoxLayout):
         layout_last = QVBoxLayout()
@@ -280,6 +250,7 @@ class OutputBlock(MacroBlock):
         size_policy = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         label.setSizePolicy(size_policy)
         layout_last.addWidget(label)
+        
         # Expected output
         h_layout1 = QHBoxLayout()
         h_layout1.addWidget(QLabel("Expected:"))
@@ -340,16 +311,90 @@ class OutputBlock(MacroBlock):
 
         layout.addLayout(layout_last)
         
-        # Connect signals AFTER all widgets are created with additional safety checks
+        # Set initial values AFTER all widgets are created
+        self.set_initial_values()
+        
+        # Connect signals LAST - with additional safety checks
+        self.connect_signals()
+        
+        # Mark as initialized
+        self._combo_initialized = True
+    
+    def set_initial_values(self):
+        """Set initial values after all widgets are created"""
+        try:
+            # Set basic values
+            if hasattr(self, 'expected_input') and self.expected_input is not None:
+                self.expected_input.setText(self._init_values['expected'])
+            
+            if hasattr(self, 'timeout_spinbox') and self.timeout_spinbox is not None:
+                self.timeout_spinbox.setValue(self._init_values['timeout'])
+            
+            if hasattr(self, 'substring_match_checkbox') and self.substring_match_checkbox is not None:
+                self.substring_match_checkbox.setChecked(self._init_values['substring_match'])
+            
+            # Set combo boxes with BLOCKED signals
+            if hasattr(self, 'fail_action_combo') and self.fail_action_combo is not None:
+                self.fail_action_combo.blockSignals(True)
+                try:
+                    if self._init_values['fail_action'] in ["Ignore", "Continue", "Exit Macro", "Custom Command", "Dialog for Command", "Dialog and Wait"]:
+                        self.fail_action_combo.setCurrentText(self._init_values['fail_action'])
+                finally:
+                    self.fail_action_combo.blockSignals(False)
+            
+            if hasattr(self, 'fail_command_input') and self.fail_command_input is not None:
+                self.fail_command_input.setText(self._init_values['fail_command'])
+            
+            if hasattr(self, 'success_action_combo') and self.success_action_combo is not None:
+                self.success_action_combo.blockSignals(True)
+                try:
+                    if self._init_values['success_action'] in ["Ignore", "Continue", "Exit Macro", "Custom Command", "Dialog for Command", "Dialog and Wait"]:
+                        self.success_action_combo.setCurrentText(self._init_values['success_action'])
+                finally:
+                    self.success_action_combo.blockSignals(False)
+            
+            if hasattr(self, 'success_command_input') and self.success_command_input is not None:
+                self.success_command_input.setText(self._init_values['success_command'])
+            
+            # Update visibility based on initial values WITHOUT triggering signals
+            self._update_command_visibility_silent()
+            
+        except Exception as e:
+            print(f"Error setting initial values in OutputBlock: {e}")
+    
+    def _update_command_visibility_silent(self):
+        """Update command input visibility without triggering signals"""
+        try:
+            if hasattr(self, 'fail_action_combo') and self.fail_action_combo is not None:
+                if hasattr(self, 'fail_command_input') and self.fail_command_input is not None:
+                    # Temporarily block signals
+                    fail_action_text = self.fail_action_combo.currentText()
+                    self.fail_command_input.setVisible(fail_action_text == "Custom Command")
+            
+            if hasattr(self, 'success_action_combo') and self.success_action_combo is not None:
+                if hasattr(self, 'success_command_input') and self.success_command_input is not None:
+                    # Temporarily block signals
+                    success_action_text = self.success_action_combo.currentText()
+                    self.success_command_input.setVisible(success_action_text == "Custom Command")
+        
+        except Exception as e:
+            print(f"Error updating command visibility: {e}")
+    
+    def connect_signals(self):
+        """Connect all signals with error protection"""
         try:
             if hasattr(self, 'success_action_combo') and self.success_action_combo is not None:
-                # Verify the widget is fully initialized before connecting
-                if hasattr(self.success_action_combo, 'currentTextChanged'):
-                    self.success_action_combo.currentTextChanged.connect(self.on_success_action_changed)
+                # Use lambda with weak reference to avoid circular references
+                from PyQt5.QtCore import pyqtSlot
+                self.success_action_combo.currentTextChanged.connect(
+                    self.on_success_action_changed
+                )
+            
             if hasattr(self, 'fail_action_combo') and self.fail_action_combo is not None:
-                # Verify the widget is fully initialized before connecting
-                if hasattr(self.fail_action_combo, 'currentTextChanged'):
-                    self.fail_action_combo.currentTextChanged.connect(self.on_fail_action_changed)
+                self.fail_action_combo.currentTextChanged.connect(
+                    self.on_fail_action_changed
+                )
+        
         except RuntimeError as e:
             # Handle C++ wrapped object deletion issues on Windows
             print(f"OutputBlock signal connection RuntimeError: {e}")
@@ -358,14 +403,18 @@ class OutputBlock(MacroBlock):
     
     def on_success_action_changed(self, text: str):
         """Handle success action combo box changes with error protection"""
-        # Skip if still initializing
-        if hasattr(self, '_initializing') and self._initializing:
+        # Skip if still initializing or not yet fully initialized
+        if getattr(self, '_initializing', True) or not getattr(self, '_combo_initialized', False):
             return
         
         try:
             if hasattr(self, 'success_command_input') and self.success_command_input is not None:
                 # Verify widget still exists (not deleted by Qt)
                 try:
+                    # Force event processing to prevent hangs
+                    from PyQt5.QtWidgets import QApplication
+                    QApplication.processEvents()
+                    
                     self.success_command_input.setVisible(text == "Custom Command")
                 except RuntimeError:
                     # Widget was deleted, probably during cleanup
@@ -375,14 +424,18 @@ class OutputBlock(MacroBlock):
     
     def on_fail_action_changed(self, text: str):
         """Handle fail action combo box changes with error protection"""
-        # Skip if still initializing
-        if hasattr(self, '_initializing') and self._initializing:
+        # Skip if still initializing or not yet fully initialized
+        if getattr(self, '_initializing', True) or not getattr(self, '_combo_initialized', False):
             return
         
         try:
             if hasattr(self, 'fail_command_input') and self.fail_command_input is not None:
                 # Verify widget still exists (not deleted by Qt)
                 try:
+                    # Force event processing to prevent hangs
+                    from PyQt5.QtWidgets import QApplication
+                    QApplication.processEvents()
+                    
                     self.fail_command_input.setVisible(text == "Custom Command")
                 except RuntimeError:
                     # Widget was deleted, probably during cleanup
@@ -392,6 +445,7 @@ class OutputBlock(MacroBlock):
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert block to dictionary with error handling"""
+        # ... keep your existing to_dict method unchanged ...
         try:
             result: Dict[str, Any] = {
                 "output": {
@@ -531,6 +585,9 @@ class MacroCanvas(QWidget):
                               self.background_color)
             
         if block:
+            # Force event processing to prevent hangs
+            QApplication.processEvents()
+
             # Add vertical button group (Up, Close, Down)
             sizePolicy = QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
             btn_col = QVBoxLayout()
@@ -802,8 +859,15 @@ class MacroEditor(QDialog):
             
             # Get steps
             steps = data.get('steps', [])
+
+            # Force initial event processing
+            QApplication.processEvents()
             
-            for step in steps:
+            for i, step in enumerate(steps):
+                # Add small delay between blocks on Windows
+                if i > 0:
+                    QApplication.processEvents()
+                    
                 if 'input' in step:
                     self.canvas.add_block('input', command=step['input'])
                 elif 'delay' in step:
