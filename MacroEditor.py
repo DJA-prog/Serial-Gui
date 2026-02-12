@@ -20,7 +20,7 @@ except:
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QLabel,
     QLineEdit, QScrollArea, QMessageBox, QSpinBox, QComboBox, QFrame,
-    QSizePolicy, QCheckBox
+    QSizePolicy, QCheckBox, QTableWidget, QTableWidgetItem
 )
 from PyQt5.QtCore import Qt, QMimeData, QPoint
 from PyQt5.QtGui import QDrag, QPalette, QColor, QMouseEvent, QDragEnterEvent, QDropEvent
@@ -38,9 +38,9 @@ class MacroBlock(QFrame):
         self.background_color = background_color
         self.setFrameStyle(QFrame.Box | QFrame.Raised)
         self.setLineWidth(2)
-        self.setMinimumHeight(60)
+        # self.setMinimumHeight(60)
         # self.setCursor(Qt.CursorShape.OpenHandCursor)
-        self.setMaximumHeight(240)
+        # self.setMaximumHeight(240)
         
         # Set background color based on type
         self.set_block_color()
@@ -550,6 +550,10 @@ class MacroCanvas(QWidget):
                                   self.accent_color, 
                                   self.hover_color, 
                                   self.background_color)
+            elif block_type == "menu_multi":
+                block = MenuMultiBlock(self.container, kwargs.get('commands', []), self.accent_color, self.hover_color, self.background_color)
+            elif block_type == "menu_single":
+                block = MenuSingleBlock(self.container, kwargs.get('commands', []), self.accent_color, self.hover_color, self.background_color)
             
             if block:
                 # Add vertical button group (Up, Close, Down)
@@ -662,6 +666,257 @@ class MacroCanvas(QWidget):
             self.blocks[idx], self.blocks[idx+1] = self.blocks[idx+1], self.blocks[idx]
             self.container_layout.removeWidget(block)
             self.container_layout.insertWidget(idx+1, block)
+
+
+class MenuDialog(QDialog):
+    """Dialog for displaying menu commands as buttons during macro execution"""
+    
+    def __init__(self, parent=None, commands: List[str] = [], is_multi: bool = True, 
+                 accent_color: str = "#1E90FF", font_color: str = "#FFFFFF", 
+                 background_color: str = "#1E1E1E", on_command_execute=None):
+        super().__init__(parent)
+        if commands is None:
+            commands = []
+        
+        self.commands = commands
+        self.is_multi = is_multi
+        self.selected_command = None
+        self.selected_commands: List[str] = []  # For multi mode: track all selections
+        self.on_command_execute = on_command_execute  # Callback to execute command immediately
+        
+        self.setWindowTitle("Menu" if is_multi else "Select Command")
+        self.setModal(True)
+        self.resize(400, 300)
+        
+        # Apply styling
+        self.setStyleSheet(f"""
+            QDialog {{
+                background-color: {background_color};
+                color: {font_color};
+            }}
+            QPushButton {{
+                background-color: {accent_color};
+                color: {font_color};
+                border: 1px solid {accent_color};
+                border-radius: 5px;
+            }}
+            QPushButton:hover {{
+                background-color: #{int(accent_color[1:], 16) | 0x222222:06x};
+            }}
+            QLabel {{
+                background-color: {background_color};
+                color: {font_color};
+            }}
+        """)
+        
+        layout = QVBoxLayout(self)
+        
+        # Title
+        if is_multi:
+            title = QLabel("Select Command(s) - Click to execute, 'Continue' when done")
+        else:
+            title = QLabel("Select a Command")
+        layout.addWidget(title)
+        
+        # Commands as buttons
+        commands_layout = QVBoxLayout()
+        for cmd in commands:
+            btn = QPushButton(cmd)
+            btn.clicked.connect(lambda checked=False, c=cmd: self.on_command_selected(c))
+            commands_layout.addWidget(btn)
+        
+        commands_layout.addStretch()
+        layout.addLayout(commands_layout)
+        
+        # Bottom buttons
+        if is_multi:
+            button_layout = QHBoxLayout()
+            continue_btn = QPushButton("Continue")
+            continue_btn.clicked.connect(self.on_continue_clicked)
+            button_layout.addStretch()
+            button_layout.addWidget(continue_btn)
+            layout.addLayout(button_layout)
+        else:
+            # For single mode, closing the dialog or no selection continues
+            pass
+    
+    def on_command_selected(self, command: str):
+        """Handle command selection"""
+        self.selected_command = command
+        if self.is_multi:
+            # In multi mode, track the selection and execute immediately if callback provided
+            self.selected_commands.append(command)
+            if self.on_command_execute:
+                self.on_command_execute(command)
+        else:
+            # In single mode, close the dialog after selecting
+            self.accept()
+    
+    def on_continue_clicked(self):
+        """Handle Continue button click in multi mode"""
+        self.selected_command = None  # Signal that Continue was clicked
+        self.accept()
+
+
+class MenuMultiBlock(MacroBlock):
+    """Block with a list of predefined send commands, that can be executed multiple times"""
+    
+    def __init__(self, parent=None, commands: List[str] = [], 
+                 accent_color: str = "#1E90FF", hover_color: str = "#63B8FF", 
+                 background_color: str = "#1E1E1E"):
+        if commands is None:
+            commands = []
+        # Set commands BEFORE calling super().__init__() because it calls setup_block_content()
+        self.commands = commands
+        super().__init__("menu_multi", "Menu - Multiple", parent, accent_color, hover_color, background_color)
+    
+    def setup_block_content(self, layout: QHBoxLayout):
+        layout_last = QVBoxLayout()
+        label = QLabel("Menu - Multiple")
+        size_policy = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        label.setSizePolicy(size_policy)
+        layout_last.addWidget(label)
+        
+        # Create table for commands
+        self.commands_table = QTableWidget()
+        self.commands_table.setColumnCount(2)
+        self.commands_table.horizontalHeader().setVisible(False)
+        self.commands_table.verticalHeader().setVisible(False)
+        self.commands_table.horizontalHeader().setStretchLastSection(False)
+        self.commands_table.setColumnWidth(0, 370)
+        self.commands_table.setColumnWidth(1, 30)
+        self.commands_table.setMaximumHeight(200)
+        self.commands_table.setStyleSheet(f"background-color: {self.background_color};")
+        self.commands_table.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        
+        # Add existing commands to table
+        for cmd in self.commands:
+            self.add_command_row(cmd)
+        
+        layout_last.addWidget(self.commands_table)
+        
+        # Add button
+        add_btn = QPushButton("+")
+        # add_btn.setFixedWidth(30)
+        add_btn.clicked.connect(lambda: self.add_command_row())
+        layout_last.addWidget(add_btn)
+                
+        layout.addLayout(layout_last)
+    
+    def add_command_row(self, command: str = ""):
+        row = self.commands_table.rowCount()
+        self.commands_table.insertRow(row)
+        
+        # Command input
+        cmd_input = QLineEdit()
+        cmd_input.setText(command)
+        cmd_input.setPlaceholderText("Enter command")
+        self.commands_table.setCellWidget(row, 0, cmd_input)
+        
+        # Delete button
+        del_btn = QPushButton("-")
+        del_btn.setStyleSheet(f"background-color: {self.accent_color}; border: 1px solid {self.accent_color}; border-radius: 5px;")
+        del_btn.setFixedWidth(30)
+        del_btn.clicked.connect(lambda: self.delete_command_row(row))
+        self.commands_table.setCellWidget(row, 1, del_btn)
+    
+    def delete_command_row(self, row: int):
+        self.commands_table.removeRow(row)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        commands = []
+        for row in range(self.commands_table.rowCount()):
+            cmd_widget = self.commands_table.cellWidget(row, 0)
+            if cmd_widget and isinstance(cmd_widget, QLineEdit):
+                cmd = cmd_widget.text().strip()
+                if cmd:
+                    commands.append(cmd)
+        
+        return {
+            "menu_multi": {
+                "commands": commands
+            }
+        }
+
+
+class MenuSingleBlock(MacroBlock):
+    """Block with a list of predefined send commands, that can only be executed once"""
+    
+    def __init__(self, parent=None, commands: List[str] = [], 
+                 accent_color: str = "#1E90FF", hover_color: str = "#63B8FF", 
+                 background_color: str = "#1E1E1E"):
+        if commands is None:
+            commands = []
+        # Set commands BEFORE calling super().__init__() because it calls setup_block_content()
+        self.commands = commands
+        super().__init__("menu_single", "Menu - Single", parent, accent_color, hover_color, background_color)
+    
+    def setup_block_content(self, layout: QHBoxLayout):
+        layout_last = QVBoxLayout()
+        label = QLabel("Menu - Single")
+        size_policy = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        label.setSizePolicy(size_policy)
+        layout_last.addWidget(label)
+        
+        # Create table for commands
+        self.commands_table = QTableWidget()
+        self.commands_table.setColumnCount(2)
+        self.commands_table.horizontalHeader().setVisible(False)
+        self.commands_table.verticalHeader().setVisible(False)
+        self.commands_table.horizontalHeader().setStretchLastSection(False)
+        self.commands_table.setColumnWidth(0, 370)
+        self.commands_table.setColumnWidth(1, 30)
+        self.commands_table.setMaximumHeight(200)
+        self.commands_table.setStyleSheet(f"background-color: {self.background_color};")
+        self.commands_table.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        
+        # Add existing commands to table
+        for cmd in self.commands:
+            self.add_command_row(cmd)
+        
+        layout_last.addWidget(self.commands_table)
+        
+        # Add button
+        add_btn = QPushButton("+")
+        add_btn.clicked.connect(lambda: self.add_command_row())
+        layout_last.addWidget(add_btn)
+        
+        layout.addLayout(layout_last)
+    
+    def add_command_row(self, command: str = ""):
+        row = self.commands_table.rowCount()
+        self.commands_table.insertRow(row)
+        
+        # Command input
+        cmd_input = QLineEdit()
+        cmd_input.setText(command)
+        cmd_input.setPlaceholderText("Enter command")
+        self.commands_table.setCellWidget(row, 0, cmd_input)
+        
+        # Delete button
+        del_btn = QPushButton("-")
+        del_btn.setFixedWidth(30)
+        del_btn.setStyleSheet(f"background-color: {self.accent_color}; border: 1px solid {self.accent_color}; border-radius: 5px;")
+        del_btn.clicked.connect(lambda: self.delete_command_row(row))
+        self.commands_table.setCellWidget(row, 1, del_btn)
+    
+    def delete_command_row(self, row: int):
+        self.commands_table.removeRow(row)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        commands = []
+        for row in range(self.commands_table.rowCount()):
+            cmd_widget = self.commands_table.cellWidget(row, 0)
+            if cmd_widget and isinstance(cmd_widget, QLineEdit):
+                cmd = cmd_widget.text().strip()
+                if cmd:
+                    commands.append(cmd)
+        
+        return {
+            "menu_single": {
+                "commands": commands
+            }
+        }
 
 
 class MacroEditor(QDialog):
@@ -789,7 +1044,9 @@ class MacroEditor(QDialog):
             ("input", "Add Send Command"),
             ("delay", "Add Delay"),
             ("dialog_wait", "Add Dialog Wait"),
-            ("output", "Add Expect Output")
+            ("output", "Add Expect Output"),
+            ("menu_multi", "Add Menu (Multi)"),
+            ("menu_single", "Add Menu (Single)")
         ]
         for block_type, label in block_types:
             row = QHBoxLayout()
@@ -862,6 +1119,12 @@ class MacroEditor(QDialog):
                     elif 'dialog_wait' in step:
                         dialog_data = step['dialog_wait']
                         self.canvas.add_block('dialog_wait', message=dialog_data.get('message', ''))
+                    elif 'menu_multi' in step:
+                        menu_data = step['menu_multi']
+                        self.canvas.add_block('menu_multi', commands=menu_data.get('commands', []))
+                    elif 'menu_single' in step:
+                        menu_data = step['menu_single']
+                        self.canvas.add_block('menu_single', commands=menu_data.get('commands', []))
                     elif 'output' in step:
                         output_data = step['output']
                         fail_data = output_data.get('fail')

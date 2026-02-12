@@ -13,7 +13,7 @@ import traceback
 from typing import Optional, Dict, Any, List
 from queue import Queue
 
-from MacroEditor import MacroEditor
+from MacroEditor import MacroEditor, MenuDialog
 from CommandsEditor import CommandsEditor
 from StyleManager import StyleManager
 from ThemesDialog import ThemesDialog
@@ -22,7 +22,7 @@ from DebugHandler import DebugHandler, set_debug_handler, get_debug_handler
 from CrashReportDialog import CrashReportDialog
 
 # Application version
-__version__ = "2.5.0"
+__version__ = "2.6.0"
 
 # Debug mode configuration
 # Set to True to enable comprehensive debugging and crash reporting
@@ -208,6 +208,7 @@ class MainWindow(QMainWindow):
     macro_status_signal = pyqtSignal(str)
     macro_dialog_signal = pyqtSignal(str, object)  # (message, result_queue)
     macro_input_dialog_signal = pyqtSignal(str, object)  # (prompt, result_queue)
+    macro_menu_signal = pyqtSignal(list, bool, object)  # (commands, is_multi, result_queue)
     
     # Hard-coded options that should not be saved to settings.yaml
     OPTIONS = {
@@ -390,6 +391,7 @@ class MainWindow(QMainWindow):
         self.macro_status_signal.connect(self.macro_status_label.setText)
         self.macro_dialog_signal.connect(self._show_macro_dialog)
         self.macro_input_dialog_signal.connect(self._show_macro_input_dialog)
+        self.macro_menu_signal.connect(self._show_macro_menu)
         
         # Update connect button appearance based on settings
         self.update_connect_button_appearance()
@@ -798,23 +800,26 @@ class MainWindow(QMainWindow):
     
     def create_new_macro(self) -> None:
         """Open the macro editor to create a new macro"""
-        editor = MacroEditor(self, style_manager=self.style_manager)
-        if editor.exec_() == QDialog.Accepted:
-            # Save the new macro
-            macro_name = editor.macro_name
-            if macro_name:
-                # Sanitize filename
-                safe_name = "".join(c for c in macro_name if c.isalnum() or c in (' ', '-', '_')).strip()
-                macro_path = self.macros_dir / f"{safe_name}.yaml"
-                
-                try:
-                    with open(macro_path, 'w') as f:
-                        yaml.dump(editor.macro_data, f, default_flow_style=False, sort_keys=False)
-                    QMessageBox.information(self, "Success", f"Macro '{macro_name}' created successfully!")
-                    self.refresh_macro_list()
-                except Exception as e:
-                    QMessageBox.critical(self, "Error", f"Failed to save macro: {e}")
-    
+        try:
+            editor = MacroEditor(self, style_manager=self.style_manager)
+            if editor.exec_() == QDialog.Accepted:
+                # Save the new macro
+                macro_name = editor.macro_name
+                if macro_name:
+                    # Sanitize filename
+                    safe_name = "".join(c for c in macro_name if c.isalnum() or c in (' ', '-', '_')).strip()
+                    macro_path = self.macros_dir / f"{safe_name}.yaml"
+                    
+                    try:
+                        with open(macro_path, 'w') as f:
+                            yaml.dump(editor.macro_data, f, default_flow_style=False, sort_keys=False)
+                        QMessageBox.information(self, "Success", f"Macro '{macro_name}' created successfully!")
+                        self.refresh_macro_list()
+                    except Exception as e:
+                        QMessageBox.critical(self, "Error", f"Failed to save macro: {e}")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to open macro editor: {e}")
+
     def show_macro_context_menu(self, pos: QPoint, macro_path: Path) -> None:
         """Show context menu for a macro button"""
         menu = QMenu(self)
@@ -961,6 +966,13 @@ class MainWindow(QMainWindow):
         """Thread-safe wrapper for send_command using signal"""
         self.macro_send_command_signal.emit()
     
+    def _send_macro_command_direct(self, command: str) -> None:
+        """Send a command directly from macro menu (thread-safe)"""
+        self._set_command_input_threadsafe(command)
+        time.sleep(0.05)
+        self._send_command_threadsafe()
+        time.sleep(0.05)
+    
     def _update_macro_status_threadsafe(self, status: str) -> None:
         """Thread-safe wrapper for updating macro status using signal"""
         self.macro_status_signal.emit(status)
@@ -993,6 +1005,32 @@ class MainWindow(QMainWindow):
         
         # Put result in queue (command string if ok, None if cancelled)
         result_queue.put(text if ok else None)
+    
+    def _show_macro_menu(self, commands: List[str], is_multi: bool, result_queue: Queue) -> None:
+        """Show a menu dialog with command buttons (called in main thread)"""
+        # Define callback for immediate command execution in multi mode
+        def on_command_execute(command: str):
+            self._send_macro_command_direct(command)
+        
+        dialog = MenuDialog(
+            self, 
+            commands=commands, 
+            is_multi=is_multi,
+            accent_color=self.style_manager.accent_color if self.style_manager else "#1E90FF",
+            font_color=self.style_manager.font_color if self.style_manager else "#FFFFFF",
+            background_color=self.style_manager.bg_secondary if self.style_manager else "#1E1E1E",
+            on_command_execute=on_command_execute if is_multi else None
+        )
+        
+        dialog.exec_()
+        
+        # Put result in queue
+        if is_multi:
+            # For multi mode, commands already executed via callback, just signal completion
+            result_queue.put(None)
+        else:
+            # For single mode, return the selected command or None
+            result_queue.put(dialog.selected_command)
     
     def _execute_macro_steps(self, macro_name: str, steps: list) -> None:
         """Execute macro steps in sequence"""
@@ -1201,6 +1239,65 @@ class MainWindow(QMainWindow):
                             time.sleep(0.05)
                             self._send_command_threadsafe()
                             time.sleep(0.1)
+                
+                elif 'menu_multi' in step:
+                    # Menu with multiple command selections
+                    menu_config = step['menu_multi']
+                    commands = menu_config.get('commands', [])
+                    
+                    if not commands:
+                        self._print_to_display_threadsafe(f"Step {i}: Warning - Menu has no commands")
+                        continue
+                    
+                    self._print_to_display_threadsafe(f"Step {i}: Menu (Multi) - {len(commands)} commands available")
+                    
+                    # Create a queue to signal when dialog closes
+                    command_queue: Queue[Optional[str]] = Queue()
+                    
+                    # Show menu dialog (commands execute immediately via callback)
+                    self.macro_menu_signal.emit(commands, True, command_queue)
+                    
+                    # Wait for user to click Continue
+                    command_queue.get()
+                    self._print_to_display_threadsafe(f"Step {i}: Menu (Multi) - User clicked Continue")
+                            
+                    # # Show menu again for next selection
+                    # self.macro_menu_signal.emit(commands, True, command_queue)
+                
+                elif 'menu_single' in step:
+                    # Menu with single command selection
+                    menu_config = step['menu_single']
+                    commands = menu_config.get('commands', [])
+                    
+                    if not commands:
+                        self._print_to_display_threadsafe(f"Step {i}: Warning - Menu has no commands")
+                        continue
+                    
+                    self._print_to_display_threadsafe(f"Step {i}: Menu (Single) - {len(commands)} commands available")
+                    
+                    # Create a queue to receive the selected command
+                    command_queue: Queue[Optional[str]] = Queue()
+                    
+                    # Show menu dialog
+                    self.macro_menu_signal.emit(commands, False, command_queue)
+                    
+                    # Wait for user to select a command
+                    selected = command_queue.get()
+                    
+                    if selected:
+                        # User selected a command
+                        self._print_to_display_threadsafe(f"Step {i}: Menu (Single) - Executing '{selected}'")
+                        
+                        # Clear session buffer before sending command
+                        with self.macro_session_lock:
+                            self.macro_session_buffer.clear()
+                        
+                        self._set_command_input_threadsafe(selected)
+                        time.sleep(0.05)
+                        self._send_command_threadsafe()
+                        time.sleep(0.1)
+                    else:
+                        self._print_to_display_threadsafe(f"Step {i}: Menu (Single) - User cancelled")
                         
             except Exception as e:
                 self._print_to_display_threadsafe(f"Step {i}: ✗ ERROR - {e}")
