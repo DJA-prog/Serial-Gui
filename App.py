@@ -1059,8 +1059,7 @@ class MainWindow(QMainWindow):
             with self.macro_session_lock:
                 if not self.macro_session_active:
                     self._update_macro_status_threadsafe("Macro: Idle")
-                    with self.macro_session_lock:
-                        self.macro_session_buffer.clear()
+                    self.macro_session_buffer.clear()
                     self.macro_state_signal.emit(False)
                     return
             
@@ -1094,8 +1093,7 @@ class MainWindow(QMainWindow):
                         with self.macro_session_lock:
                             if not self.macro_session_active:
                                 self._update_macro_status_threadsafe("Macro: Idle")
-                                with self.macro_session_lock:
-                                    self.macro_session_buffer.clear()
+                                self.macro_session_buffer.clear()
                                 self.macro_state_signal.emit(False)
                                 return
                         
@@ -1157,8 +1155,7 @@ class MainWindow(QMainWindow):
                     with self.macro_session_lock:
                         if not self.macro_session_active:
                             self._update_macro_status_threadsafe("Macro: Idle")
-                            with self.macro_session_lock:
-                                self.macro_session_buffer.clear()
+                            self.macro_session_buffer.clear()
                             self.macro_state_signal.emit(False)
                             return
                     
