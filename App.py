@@ -206,6 +206,7 @@ class MainWindow(QMainWindow):
     macro_set_input_signal = pyqtSignal(str)
     macro_send_command_signal = pyqtSignal()
     macro_status_signal = pyqtSignal(str)
+    macro_state_signal = pyqtSignal(bool)  # True = active, False = inactive
     macro_dialog_signal = pyqtSignal(str, object)  # (message, result_queue)
     macro_input_dialog_signal = pyqtSignal(str, object)  # (prompt, result_queue)
     macro_menu_signal = pyqtSignal(list, bool, object)  # (commands, is_multi, result_queue)
@@ -389,6 +390,7 @@ class MainWindow(QMainWindow):
         self.macro_set_input_signal.connect(self.command_input.setText)
         self.macro_send_command_signal.connect(self.send_command)
         self.macro_status_signal.connect(self.macro_status_label.setText)
+        self.macro_state_signal.connect(self.update_save_output_button_state)
         self.macro_dialog_signal.connect(self._show_macro_dialog)
         self.macro_input_dialog_signal.connect(self._show_macro_input_dialog)
         self.macro_menu_signal.connect(self._show_macro_menu)
@@ -935,6 +937,12 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Not Connected", "Please connect to a serial port first.")
             return
         
+        # Check if a macro is already running
+        with self.macro_session_lock:
+            if self.macro_session_active:
+                QMessageBox.warning(self, "Macro Running", "A macro is already running. Please stop it first.")
+                return
+        
         try:
             with open(macro_path, 'r') as f:
                 macro_data = yaml.safe_load(f)
@@ -1039,12 +1047,22 @@ class MainWindow(QMainWindow):
             self.macro_session_active = True
             self.macro_session_buffer.clear()
         
+        self.macro_state_signal.emit(True)  # Notify UI that macro is active
         self._update_macro_status_threadsafe(f"Macro: Running '{macro_name}'")
         self._print_to_display_threadsafe(f"══════════════════════════════════════")
         self._print_to_display_threadsafe(f"  Executing Macro: {macro_name}")
         self._print_to_display_threadsafe(f"══════════════════════════════════════")
         
         for i, step in enumerate(steps, 1):
+            # Check if macro was stopped by user - exit silently without printing anything
+            with self.macro_session_lock:
+                if not self.macro_session_active:
+                    self._update_macro_status_threadsafe("Macro: Idle")
+                    with self.macro_session_lock:
+                        self.macro_session_buffer.clear()
+                    self.macro_state_signal.emit(False)
+                    return
+            
             try:
                 if 'input' in step:
                     # Clear session buffer before sending command
@@ -1065,10 +1083,24 @@ class MainWindow(QMainWindow):
                     with self.macro_session_lock:
                         self.macro_session_buffer.clear()
                     
-                    # Wait for specified time
+                    # Wait for specified time (interruptible in 100ms chunks)
                     delay_ms = step['delay']
                     self._print_to_display_threadsafe(f"Step {i}: Delay {delay_ms}ms")
-                    time.sleep(delay_ms / 1000.0)
+                    
+                    # Break delay into smaller chunks to check for stop signal
+                    remaining_ms = delay_ms
+                    while remaining_ms > 0:
+                        with self.macro_session_lock:
+                            if not self.macro_session_active:
+                                self._update_macro_status_threadsafe("Macro: Idle")
+                                with self.macro_session_lock:
+                                    self.macro_session_buffer.clear()
+                                self.macro_state_signal.emit(False)
+                                return
+                        
+                        chunk_ms = min(100, remaining_ms)
+                        time.sleep(chunk_ms / 1000.0)
+                        remaining_ms -= chunk_ms
                     
                 elif 'dialog_wait' in step:
                     # Clear session buffer before dialog
@@ -1100,6 +1132,7 @@ class MainWindow(QMainWindow):
                         with self.macro_session_lock:
                             self.macro_session_active = False
                             self.macro_session_buffer.clear()
+                        self.macro_state_signal.emit(False)  # Notify UI that macro is inactive
                         return
                     else:
                         self._print_to_display_threadsafe(f"Step {i}: User continued macro")
@@ -1118,6 +1151,15 @@ class MainWindow(QMainWindow):
                     
                     # Wait and check for expected output
                     received = self._wait_for_response(expected, timeout_ms / 1000.0, substring_match)
+                    
+                    # Check if macro was stopped by user while waiting for response
+                    with self.macro_session_lock:
+                        if not self.macro_session_active:
+                            self._update_macro_status_threadsafe("Macro: Idle")
+                            with self.macro_session_lock:
+                                self.macro_session_buffer.clear()
+                            self.macro_state_signal.emit(False)
+                            return
                     
                     if not received:
                         self._print_to_display_threadsafe(f"Step {i}: ✗ FAILED - Expected output not received")
@@ -1169,6 +1211,7 @@ class MainWindow(QMainWindow):
                                 with self.macro_session_lock:
                                     self.macro_session_active = False
                                     self.macro_session_buffer.clear()
+                                self.macro_state_signal.emit(False)  # Notify UI that macro is inactive
                                 return
                             else:
                                 self._print_to_display_threadsafe(f"Step {i}: User continued macro")
@@ -1194,6 +1237,7 @@ class MainWindow(QMainWindow):
                             with self.macro_session_lock:
                                 self.macro_session_active = False
                                 self.macro_session_buffer.clear()
+                            self.macro_state_signal.emit(False)  # Notify UI that macro is inactive
                             return
                         elif success_action == "DIALOG":
                             # Show dialog to get custom command from user
@@ -1228,6 +1272,7 @@ class MainWindow(QMainWindow):
                                 with self.macro_session_lock:
                                     self.macro_session_active = False
                                     self.macro_session_buffer.clear()
+                                self.macro_state_signal.emit(False)  # Notify UI that macro is inactive
                                 return
                             else:
                                 self._print_to_display_threadsafe(f"Step {i}: User continued macro")
@@ -1317,6 +1362,8 @@ class MainWindow(QMainWindow):
         with self.macro_session_lock:
             self.macro_session_active = False
             self.macro_session_buffer.clear()
+        
+        self.macro_state_signal.emit(False)  # Notify UI that macro is inactive
     
     def _wait_for_response(self, expected: str, timeout: float, substring_match: bool = True) -> bool:
         """Wait for expected response from serial port
@@ -1343,7 +1390,11 @@ class MainWindow(QMainWindow):
         
         # If not found in buffer, wait for new data to arrive in the session buffer
         while time.time() - start_time < timeout:
+            # Check if macro was stopped by user
             with self.macro_session_lock:
+                if not self.macro_session_active:
+                    return False  # Stop waiting if macro was stopped
+                
                 # Check entire session buffer for the expected response
                 for line in self.macro_session_buffer:
                     line_stripped = line.strip()
@@ -1872,7 +1923,7 @@ class MainWindow(QMainWindow):
 
 
         self.save_output_button = QPushButton("Save output")
-        self.save_output_button.clicked.connect(self.save_output)
+        self.save_output_button.clicked.connect(self.on_save_output_or_stop_macro_clicked)
         self.save_output_button.setToolTip("Save the content of the response display to a file")
 
         self.clear_button = QPushButton("Clear output")
@@ -2169,6 +2220,49 @@ class MainWindow(QMainWindow):
                 QMessageBox.information(self, "Success", "Output saved successfully.")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to save output: {e}")
+
+    def on_save_output_or_stop_macro_clicked(self) -> None:
+        """Handle button click - either save output or stop macro depending on macro state"""
+        if self.macro_session_active:
+            self.stop_macro()
+        else:
+            self.save_output()
+    
+    def update_save_output_button_state(self, is_macro_active: bool) -> None:
+        """Update button appearance based on macro state"""
+        if is_macro_active:
+            # Macro is active - show STOP MACRO button in red with white text
+            self.save_output_button.setText("STOP MACRO")
+            self.save_output_button.setStyleSheet("""
+                QPushButton {
+                    background-color: #FF4444;
+                    color: white;
+                    font-weight: bold;
+                    border: 2px solid #CC0000;
+                    border-radius: 4px;
+                    padding: 4px;
+                }
+                QPushButton:hover {
+                    background-color: #FF6666;
+                }
+                QPushButton:pressed {
+                    background-color: #CC0000;
+                }
+            """)
+        else:
+            # Macro is inactive - show Save output button normally
+            self.save_output_button.setText("Save output")
+            self.save_output_button.setStyleSheet("")  # Reset to default style
+    
+    def stop_macro(self) -> None:
+        """Stop the currently running macro"""
+        with self.macro_session_lock:
+            self.macro_session_active = False
+        self._print_to_display_threadsafe("══════════════════════════════════════")
+        self._print_to_display_threadsafe("Macro STOPPED by user")
+        self._print_to_display_threadsafe("══════════════════════════════════════")
+        self._update_macro_status_threadsafe("Macro: Stopped")
+        self.macro_state_signal.emit(False)  # Notify UI that macro is inactive
 
     def update_tab_input_history(self) -> None:
         history: list[str] = []
