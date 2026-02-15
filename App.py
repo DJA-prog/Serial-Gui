@@ -263,6 +263,7 @@ class MainWindow(QMainWindow):
         self.history_index = len(self.history)  # start at "end" (new command)
         self.current_text = ""  # stores what user was typing before navigating history
         self.last_connected: bool = False # Keeps if there was a last connection since start, used with auto reconnect
+        self.auto_reconnect_disabled: bool = False # Flag to disable auto-reconnect when user clicks disconnect
 
         self.app_configs_path = get_config_dir("SerialCommunicationMonitor")
         
@@ -2456,7 +2457,7 @@ class MainWindow(QMainWindow):
         self.populate_port_combo()
 
         # Auto-reconnect if needed
-        if self.auto_reconnect_checkbox.isChecked():
+        if self.auto_reconnect_checkbox.isChecked() and not self.auto_reconnect_disabled:
             # Use the last connected port from settings, not the current combo selection
             last_port = self.settings.get('general', {}).get('last_serial_port', '')
             
@@ -2528,6 +2529,9 @@ class MainWindow(QMainWindow):
         if DEBUG_ENABLED:
             self.debug_handler.log(f"Attempting to connect to {port} at {baud_rate} baud", "INFO")
 
+        # Re-enable auto-reconnect when user clicks connect
+        self.auto_reconnect_disabled = False
+
         if self.settings.get("general", {}).get("last-baudrate", 115200) != baud_rate:
             self.settings["general"]["last-baudrate"] = baud_rate
             self.save_settings()
@@ -2595,6 +2599,9 @@ class MainWindow(QMainWindow):
     def disconnect_serial(self) -> None:
         if DEBUG_ENABLED:
             self.debug_handler.log("Disconnecting serial port", "INFO")
+        
+        # Disable auto-reconnect when user manually disconnects
+        self.auto_reconnect_disabled = True
             
         if self.serial_port:
             try:
