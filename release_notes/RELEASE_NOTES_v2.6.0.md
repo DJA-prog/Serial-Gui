@@ -65,6 +65,13 @@
 - **Clean initialization** - New flag properly initialized and managed throughout app lifecycle
 - **No interference** - Manual reconnect operations no longer interfere with auto-reconnect logic
 
+#### ESPTool Upload Interference (NEW)
+- **Smart detection** - App now detects when esptool is running during firmware uploads
+- **No port conflicts** - Serial port refresh is suspended while esptool is active
+- **Smooth uploads** - Prevents interference with ESP32/ESP8266 programming via Arduino IDE or PlatformIO
+- **Automatic resumption** - Port monitoring resumes automatically after upload completes
+- **Debug logging** - Added debug messages when esptool is detected (visible in debug builds)
+
 ## Technical Details
 
 ### New Variables

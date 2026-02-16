@@ -2324,6 +2324,31 @@ class MainWindow(QMainWindow):
         # On Windows, this filter won't match anything (COM ports don't contain "ttyS")
         return [port.device for port in ports if "ttyS" not in port.device]
     
+    def is_esptool_running(self) -> bool:
+        """Check if esptool.py or esptool is currently running."""
+        debug = get_debug_handler()
+        try:
+            system = platform.system()
+            if system == 'Windows':
+                # On Windows, use tasklist command
+                result = subprocess.run(['tasklist'], capture_output=True, text=True, timeout=1)
+                output = result.stdout.lower()
+                is_running = 'esptool' in output or 'python' in output  # Check for esptool or python (which might be running esptool)
+                if is_running and debug and debug.enabled:
+                    debug.log("esptool detected running (Windows)", "DEBUG")
+                return is_running
+            else:
+                # On Linux/Mac, use ps command
+                result = subprocess.run(['ps', 'aux'], capture_output=True, text=True, timeout=1)
+                output = result.stdout.lower()
+                is_running = 'esptool' in output
+                if is_running and debug and debug.enabled:
+                    debug.log("esptool detected running (Linux/Mac)", "DEBUG")
+                return is_running
+        except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+            # If we can't check, assume it's not running to avoid blocking normal operation
+            return False
+    
     def is_port_in_use(self, port_name: str) -> bool:
         """Check if a serial port is currently in use by attempting to open it."""
         # Skip check if this is our currently connected port
@@ -2444,6 +2469,13 @@ class MainWindow(QMainWindow):
             return message
 
     def refresh_serial_ports(self) -> None:
+        # Skip port checking if esptool is running to avoid interference during uploads
+        if self.is_esptool_running():
+            debug = get_debug_handler()
+            if debug and debug.enabled:
+                debug.log("Skipping serial port refresh while esptool is running", "DEBUG")
+            return
+        
         current_ports = self.get_serial_ports()
 
         # Always repopulate to update colors, even if port list hasn't changed
