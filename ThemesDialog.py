@@ -3,7 +3,7 @@ ThemesDialog - Dialog for selecting and applying pre-programmed color themes
 """
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
-    QListWidget, QListWidgetItem, QTextEdit, QMessageBox
+    QListWidget, QListWidgetItem, QTextEdit, QMessageBox, QColorDialog
 )
 from PyQt5.QtCore import Qt
 from typing import Dict, Any, Callable, Optional
@@ -63,34 +63,20 @@ class ThemesDialog(QDialog):
             "background_color": "#1A0B1A",
             "description": "Rich purple theme for a unique and creative look. Stand out from the crowd."
         },
-        "Windows XP": {
-            "accent_color": "#0063B1",
-            "hover_color": "#3399FF",
-            "font_color": "#E8F4FF",
-            "background_color": "#001F3F",
-            "description": "Nostalgic Luna blue theme inspired by Windows XP. Brings back memories of the early 2000s computing era."
-        },
-        "Windows 7": {
-            "accent_color": "#3E8EDE",
-            "hover_color": "#6CB4EE",
-            "font_color": "#F0F0F0",
-            "background_color": "#1A2332",
-            "description": "Classic Aero-inspired theme from Windows 7. Professional glass-like aesthetics with refined blue tones."
-        },
-        "Windows 10": {
-            "accent_color": "#0078D4",
+        "Windows 10 (light)": {
+            "accent_color": "#CCE8FF",
             "hover_color": "#40A0E0",
-            "font_color": "#FFFFFF",
-            "background_color": "#1E1E1E",
+            "font_color": "#000000",
+            "background_color": "#FFFFFF",
             "description": "Modern flat design from Windows 10. Clean, contemporary look with Microsoft's signature blue."
         },
-        "Windows 11": {
-            "accent_color": "#0067C0",
-            "hover_color": "#4DA3E0",
-            "font_color": "#F5F5F5",
-            "background_color": "#202020",
-            "description": "Refined modern design from Windows 11. Soft rounded aesthetics with a polished, contemporary feel."
-        }
+        "Custom": {
+            "accent_color": "#1E90FF",
+            "hover_color": "#63B8FF",
+            "font_color": "#FFFFFF",
+            "background_color": "#121212",
+            "description": "Create your own custom theme by selecting individual colors for each element. Choose colors that match your personal preference and workflow."
+        },
     }
     
     def __init__(self, parent=None, current_settings: Optional[Dict[str, Any]] = None, apply_callback: Optional[Callable] = None):
@@ -105,6 +91,13 @@ class ThemesDialog(QDialog):
         super().__init__(parent)
         self.current_settings = current_settings or {}
         self.apply_callback = apply_callback
+        # Store custom colors for the Custom theme
+        self.custom_colors = {
+            "accent_color": "#1E90FF",
+            "hover_color": "#63B8FF",
+            "font_color": "#FFFFFF",
+            "background_color": "#121212"
+        }
         self.setup_ui()
         
     def setup_ui(self) -> None:
@@ -174,16 +167,15 @@ class ThemesDialog(QDialog):
         button_layout.addWidget(self.close_button)
         
         main_layout.addLayout(button_layout)
-        
-    def on_theme_selected(self, current: QListWidgetItem, previous: QListWidgetItem) -> None:
-        """Handle theme selection change"""
-        if current:
-            theme_name = current.text()
-            self.update_preview(theme_name)
     
     def update_preview(self, theme_name: str) -> None:
         """Update the preview text with theme details"""
         if theme_name not in self.THEMES:
+            return
+        
+        # For Custom theme, show interactive color buttons
+        if theme_name == "Custom":
+            self.show_custom_preview()
             return
             
         theme = self.THEMES[theme_name]
@@ -219,6 +211,125 @@ class ThemesDialog(QDialog):
         
         self.preview_text.setHtml(preview_html)
     
+    def show_custom_preview(self) -> None:
+        """Show interactive custom theme preview with clickable color buttons"""
+        from PyQt5.QtWidgets import QWidget, QGridLayout, QFrame
+        
+        # Clear existing preview
+        self.preview_text.clear()
+        
+        # Create a widget to hold the custom color selectors
+        custom_widget = QWidget()
+        custom_layout = QVBoxLayout(custom_widget)
+        
+        # Title and description
+        title = QLabel("<h3>Custom Theme</h3>")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        custom_layout.addWidget(title)
+        
+        desc = QLabel("<i>Click on each color box below to open the color picker and customize your theme.</i>")
+        desc.setWordWrap(True)
+        desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        custom_layout.addWidget(desc)
+        
+        custom_layout.addSpacing(10)
+        
+        # Create color selector grid
+        grid_layout = QGridLayout()
+        grid_layout.setSpacing(10)
+        
+        color_definitions = [
+            ("accent_color", "Accent Color"),
+            ("hover_color", "Hover Color"),
+            ("font_color", "Font Color"),
+            ("background_color", "Background Color")
+        ]
+        
+        self.color_buttons = {}
+        
+        for row, (key, label) in enumerate(color_definitions):
+            # Label
+            label_widget = QLabel(f"{label}:")
+            grid_layout.addWidget(label_widget, row, 0)
+            
+            # Color button
+            color_btn = QPushButton()
+            color_btn.setFixedSize(80, 30)
+            color_btn.setStyleSheet(f"background-color: {self.custom_colors[key]}; border: 2px solid #666;")
+            color_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            color_btn.clicked.connect(lambda checked, k=key: self.pick_custom_color(k))
+            self.color_buttons[key] = color_btn
+            grid_layout.addWidget(color_btn, row, 1)
+            
+            # Hex value label
+            hex_label = QLabel(self.custom_colors[key])
+            hex_label.setObjectName(f"hex_{key}")  # For easy update later
+            grid_layout.addWidget(hex_label, row, 2)
+        
+        custom_layout.addLayout(grid_layout)
+        custom_layout.addStretch()
+        
+        # Replace preview_text with custom widget temporarily
+        # We'll use setWidget on a scroll area
+        self.preview_text.hide()
+        
+        # Check if we already have a custom preview container
+        if not hasattr(self, 'custom_preview_container'):
+            self.custom_preview_container = QWidget()
+            # Insert it in the same layout as preview_text
+            parent_widget = self.preview_text.parent()
+            if isinstance(parent_widget, QWidget):
+                parent_layout = parent_widget.layout()
+                if parent_layout:
+                    parent_layout.addWidget(self.custom_preview_container)
+        
+        # Clear and set new layout
+        if self.custom_preview_container.layout():
+            QWidget().setLayout(self.custom_preview_container.layout())
+        
+        self.custom_preview_container.setLayout(custom_layout)
+        self.custom_preview_container.show()
+    
+    def pick_custom_color(self, color_key: str) -> None:
+        """Open color picker for a specific custom color"""
+        from PyQt5.QtGui import QColor
+        
+        current_color = QColor(self.custom_colors[color_key])
+        
+        color = QColorDialog.getColor(
+            current_color,
+            self,
+            f"Select {color_key.replace('_', ' ').title()}",
+            QColorDialog.ColorDialogOption.ShowAlphaChannel
+        )
+        
+        if color.isValid():
+            # Update stored color
+            self.custom_colors[color_key] = color.name()
+            
+            # Update button appearance
+            self.color_buttons[color_key].setStyleSheet(
+                f"background-color: {color.name()}; border: 2px solid #666;"
+            )
+            
+            # Update hex label
+            for child in self.custom_preview_container.findChildren(QLabel):
+                if child.objectName() == f"hex_{color_key}":
+                    child.setText(color.name())
+                    break
+    
+    def on_theme_selected(self, current: QListWidgetItem, previous: QListWidgetItem) -> None:
+        """Handle theme selection change"""
+        # Hide custom preview container if switching away from Custom
+        if hasattr(self, 'custom_preview_container'):
+            if current and current.text() != "Custom":
+                self.custom_preview_container.hide()
+                self.preview_text.show()
+        
+        if current:
+            theme_name = current.text()
+            self.update_preview(theme_name)
+    
     def apply_theme(self) -> None:
         """Apply the selected theme"""
         current_item = self.themes_list.currentItem()
@@ -227,17 +338,22 @@ class ThemesDialog(QDialog):
             return
         
         theme_name = current_item.text()
-        theme = self.THEMES[theme_name]
         
-        # Call the callback if provided
-        if self.apply_callback:
-            # Extract only the color settings
+        # Handle custom theme - use stored custom colors
+        if theme_name == "Custom":
+            theme_settings = self.custom_colors.copy()
+        else:
+            # Extract only the color settings from predefined theme
+            theme = self.THEMES[theme_name]
             theme_settings = {
                 "accent_color": theme["accent_color"],
                 "hover_color": theme["hover_color"],
                 "font_color": theme["font_color"],
                 "background_color": theme["background_color"]
             }
+        
+        # Call the callback if provided
+        if self.apply_callback:
             self.apply_callback(theme_settings)
         
         QMessageBox.information(

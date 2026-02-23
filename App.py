@@ -172,7 +172,6 @@ class HistoryLineEdit(QLineEdit):
                     self.setText(self.parent_window.current_text)
             elif a0.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
                 # Check for double-enter on empty input
-                import time
                 current_time = int(time.time() * 1000)  # milliseconds
                 
                 if not self.text().strip():
@@ -199,6 +198,62 @@ class HistoryLineEdit(QLineEdit):
                 super().keyPressEvent(a0)
         else:
             super().keyPressEvent(a0)
+
+class SecondaryLineEdit(QLineEdit):
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.parent_window = parent  # so we can access parent's history list
+        self.last_enter_time = 0  # Track time of last enter press for double-enter detection
+        self.double_enter_threshold = 500  # milliseconds
+
+    def keyPressEvent(self, a0: QKeyEvent) -> None:  # type: ignore[override]
+        if self.parent_window is not None:
+            if a0.key() == Qt.Key.Key_Up:
+                # Limit navigation to last 10 history entries
+                history_length = len(self.parent_window.history)
+                start_index = max(0, history_length - 10)
+                
+                if self.parent_window.history_index > start_index:
+                    if self.parent_window.history_index == history_length:
+                        self.parent_window.current_text = self.text()
+                    self.parent_window.history_index -= 1
+                    self.setText(self.parent_window.history[self.parent_window.history_index])
+            elif a0.key() == Qt.Key.Key_Down:
+                if self.parent_window.history_index < len(self.parent_window.history) - 1:
+                    self.parent_window.history_index += 1
+                    self.setText(self.parent_window.history[self.parent_window.history_index])
+                elif self.parent_window.history_index == len(self.parent_window.history) - 1:
+                    self.parent_window.history_index += 1
+                    self.setText(self.parent_window.current_text)
+            elif a0.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                # Check for double-enter on empty input
+                current_time = int(time.time() * 1000)  # milliseconds
+                
+                if not self.text().strip():
+                    # Input is empty
+                    if current_time - self.last_enter_time < self.double_enter_threshold:
+                        # Double enter detected - get and send last command
+                        if self.parent_window.history:
+                            last_command = self.parent_window.history[-1]
+                            self.setText(last_command)
+                            # Let the parent handle the send
+                            super().keyPressEvent(a0)
+                            self.last_enter_time = 0  # Reset to prevent triple-enter issues
+                        else:
+                            # No history, do nothing
+                            self.last_enter_time = 0
+                    else:
+                        # First enter on empty input - just record time, don't send
+                        self.last_enter_time = current_time
+                else:
+                    # Input has text - send normally
+                    self.last_enter_time = 0
+                    super().keyPressEvent(a0)
+            else:
+                super().keyPressEvent(a0)
+        else:
+            super().keyPressEvent(a0)
+
 
 class MainWindow(QMainWindow):
     # Qt signals for thread-safe communication
@@ -1864,16 +1919,15 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Not Connected", "Please connect to a serial port first.")
             return
         
-        # Set the command in the input field
-        self.command_input.setText(command)
-        # Trigger the send
-        self.send_command()
+        self.send_command(command)
+        self.command_input.clear()
 
     def create_right_panel(self) -> None:
         """
         Creates the right panel of the main window, which includes the response display area,
         predefined command buttons, and status indicators for serial connections.
         """
+        middle_right_vertical = QVBoxLayout()
         # Right layout: Response display
         self.response_display = QTextEdit()
         self.response_display.setReadOnly(True)
@@ -1884,7 +1938,14 @@ class MainWindow(QMainWindow):
             doc.setMaximumBlockCount(max_lines)
         self.response_display.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.response_display.customContextMenuRequested.connect(self.show_output_context_menu)
-        self.middle_layout.addWidget(self.response_display)
+        middle_right_vertical.addWidget(self.response_display)
+
+        self.bottom_command_input = HistoryLineEdit(self)
+        self.bottom_command_input.setPlaceholderText("Secondary input")
+        self.bottom_command_input.returnPressed.connect(self.send_from_bottom_input)
+        middle_right_vertical.addWidget(self.bottom_command_input)
+
+        self.middle_layout.addLayout(middle_right_vertical)
 
     def create_bottom_panel(self) -> None:
         """
@@ -2704,8 +2765,20 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"Failed to save command history: {e}")
         
-    def send_command(self) -> None:
-        command = self.command_input.text().strip()
+    def send_command(self, command_str: Optional[str] = None, clear_input: bool = True) -> None:
+        """Send a command via serial port.
+        
+        Args:
+            command_str: Command to send. If None, reads from self.command_input
+            clear_input: Whether to clear self.command_input after sending (only when command_str is None)
+        """
+        # If no command provided, read from main command input
+        if command_str is None:
+            command = self.command_input.text().strip()
+            should_clear = clear_input
+        else:
+            command = command_str.strip()
+            should_clear = False  # Never clear when command is provided externally
         
         if DEBUG_ENABLED:
             self.debug_handler.log(f"Sending command: '{command}'", "DEBUG")
@@ -2738,16 +2811,26 @@ class MainWindow(QMainWindow):
                         show_flow = self.settings.get("general", {}).get("show_flow_indicators", True)
                         if not filter_empty and show_flow:
                             self.print_to_display("<")
+                    
+                    # Clear input only if appropriate
+                    if should_clear:
+                        self.command_input.clear()
+                        
             except Exception as e:
                 if DEBUG_ENABLED:
                     self.debug_handler.log(f"Failed to send command: {e}", "ERROR")
                 raise
-            
-            self.command_input.clear()
 
     def send_predefined_command(self, command: str) -> None:
-        self.command_input.setText(command)
-        self.send_command()
+        """Send a predefined command without affecting the main input field."""
+        self.send_command(command)
+
+    def send_from_bottom_input(self) -> None:
+        """Send command from the bottom secondary input field."""
+        command = self.bottom_command_input.text().strip()
+        if command:  # Only send if there's actual text
+            self.send_command(command)
+            self.bottom_command_input.clear()
 
     def handle_serial_data(self, data: str) -> None:
         """Handle data received from the serial reader thread"""

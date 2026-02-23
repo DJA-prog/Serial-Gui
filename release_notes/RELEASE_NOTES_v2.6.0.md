@@ -4,7 +4,44 @@
 
 ## What's New in v2.6.0
 
-### 🎯 Macro Improvements
+### � Theme System Enhancements (NEW)
+
+#### Custom Theme Creator
+- **Interactive color selection** - Create your own custom theme with a visual color picker
+- **Real-time preview** - See color changes instantly before applying
+- **Color wheel interface** - Full-featured color picker with RGB/HSV controls
+- **Click-to-customize** - Click on any color box to open the color picker
+- **Four customizable elements** - Accent Color, Hover Color, Font Color, and Background Color
+- **Hex value display** - See and verify hex color codes for each element
+- **Persistent storage** - Custom colors are saved during the dialog session
+
+#### How It Works
+1. **Open Themes Dialog** - Navigate to Settings > Themes
+2. **Select "Custom"** - Choose the Custom theme from the list
+3. **Click color boxes** - Each color element shows as a clickable button
+4. **Pick colors** - Color wheel dialog opens for precise selection
+5. **Preview changes** - See your choices update in real-time
+6. **Apply theme** - Click "Apply Theme" to activate your custom design
+
+### 📝 Secondary Input Field (NEW)
+
+#### Bottom Command Input
+- **Dual input system** - Added a second command input field at the bottom of the display
+- **Independent operation** - Both inputs work simultaneously without interference
+- **Enter to send** - Press Enter in the bottom input to send commands (no send button)
+- **Auto-clear** - Bottom input clears automatically after sending
+- **History support** - Full command history navigation using arrow keys
+- **Main input preserved** - Top input remains unchanged when using bottom input
+- **Flexible workflow** - Use top input for primary commands, bottom for quick one-offs
+
+#### Improved send_command Function
+- **Unified command sending** - Refactored to handle commands from any source
+- **Parameter flexibility** - Can accept command string or read from main input
+- **Smart clearing** - Only clears input field when appropriate
+- **Backward compatible** - Existing macro and button functionality unchanged
+- **Thread-safe** - Works correctly with macros and signals
+
+### �🎯 Macro Improvements
 
 #### Silent Macro Stop (NEW)
 - **Clean termination** - Stopping a macro no longer outputs additional messages
@@ -73,6 +110,20 @@
 - **Debug logging** - Added debug messages when esptool is detected (visible in debug builds)
 
 ## Technical Details
+
+### Theme System
+- **Custom theme entry** - Added "Custom" to THEMES dictionary
+- **Interactive preview** - New `show_custom_preview()` method creates clickable color interface
+- **Color picker integration** - `pick_custom_color()` opens QColorDialog for each element
+- **Real-time updates** - Button and hex label update immediately when color selected
+- **QColorDialog import** - Added to ThemesDialog imports for color picker functionality
+
+### Secondary Input Field
+- **New widget** - `self.bottom_command_input` (HistoryLineEdit) added to right panel
+- **Signal handler** - `send_from_bottom_input()` method handles Enter key press
+- **Independent clearing** - Bottom input manages its own clear operation
+- **send_command refactor** - Now accepts `Optional[str]` parameter with default None
+- **Smart input handling** - Reads from main input when no parameter provided
 
 ### New Variables
 - `auto_reconnect_disabled` - Flag to track if auto-reconnect should be paused
