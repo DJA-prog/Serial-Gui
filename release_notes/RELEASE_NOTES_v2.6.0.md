@@ -147,7 +147,7 @@
 - **Immediate execution** - Selected commands sent to serial port immediately upon selection
 
 ## Known Issues
-None reported
+Auto Serial port scanning may interupt some serial devices and processes.
 
 ## Installation & Updating
 Users are encouraged to update to v2.6.0 for improved macro stability and better auto-reconnect control.
