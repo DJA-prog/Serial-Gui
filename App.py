@@ -22,7 +22,7 @@ from DebugHandler import DebugHandler, set_debug_handler, get_debug_handler
 from CrashReportDialog import CrashReportDialog
 
 # Application version
-__version__ = "2.6.0"
+__version__ = "2.7.0"
 
 # Debug mode configuration
 # Set to True to enable comprehensive debugging and crash reporting
@@ -360,7 +360,8 @@ class MainWindow(QMainWindow):
                 'filter_empty_lines': False,
                 'custom_line_filter': '',
                 'show_flow_indicators': True,
-                'disconnect_on_inactive': False
+                'disconnect_on_inactive': False,
+                'auto_serial_update': True
             }
         }
         self.default_settings = self.settings.copy()
@@ -404,7 +405,9 @@ class MainWindow(QMainWindow):
         # Timer for refreshing serial ports
         self.refresh_timer = QTimer()
         self.refresh_timer.timeout.connect(self.refresh_serial_ports)
-        self.refresh_timer.start(1000)  # Refresh every 1 second
+        # Only start timer if auto_serial_update is enabled
+        if self.settings.get('general', {}).get('auto_serial_update', True):
+            self.refresh_timer.start(1000)  # Refresh every 1 second
 
         # Timer for connected time
         self.connected_time_seconds = 0
@@ -419,6 +422,9 @@ class MainWindow(QMainWindow):
 
         self.create_top_ribbon()  # Create the top ribbon with serial controls
 
+        # Set initial visibility of Update Serial button based on auto_serial_update setting
+        auto_update_enabled = self.settings.get('general', {}).get('auto_serial_update', True)
+        self.update_serial_button.setVisible(not auto_update_enabled)
         
         self.middle_layout = QHBoxLayout() # Middle layout: Split into left (tables) and right (output)
         
@@ -495,6 +501,11 @@ class MainWindow(QMainWindow):
         self.port_combo.setFixedWidth(150)  # Set fixed width for the port dropdown
         self.port_combo.setToolTip("Select the serial port to connect to. Hover over ports to see availability.")
 
+        # Update Serial button (shown only when auto_serial_update is disabled)
+        self.update_serial_button = QPushButton("Update Serial")
+        self.update_serial_button.clicked.connect(self.manual_update_serial_ports)
+        self.update_serial_button.setToolTip("Manually update the list of available serial ports")
+        
         baud_rate_label = QLabel("Baud Rate:")
         self.baud_rate_combo = QComboBox()
         self.baud_rate_combo.addItems(["9600", "19200", "38400", "57600", "115200", "230400", "460800", "921600", "Custom"])
@@ -527,6 +538,7 @@ class MainWindow(QMainWindow):
 
         top_layout.addWidget(port_label)
         top_layout.addWidget(self.port_combo)
+        top_layout.addWidget(self.update_serial_button)
         top_layout.addWidget(baud_rate_label)
         top_layout.addWidget(self.baud_rate_combo)  # Add baud rate dropdown
         top_layout.addWidget(self.connect_button)
@@ -1518,6 +1530,9 @@ class MainWindow(QMainWindow):
         # Row 17: disconnect_on_inactive (bool)
         disconnect_on_inactive_item = QTableWidgetItem(str(settings.get("disconnect_on_inactive", False)))
         self.settings_table.setItem(17, 1, disconnect_on_inactive_item)
+        # Row 18: auto_serial_update (bool)
+        auto_serial_update_item = QTableWidgetItem(str(settings.get("auto_serial_update", True)))
+        self.settings_table.setItem(18, 1, auto_serial_update_item)
 
     def tab_settings(self) -> None:
 
@@ -1527,7 +1542,7 @@ class MainWindow(QMainWindow):
         # Settings table
         self.settings_table = QTableWidget()
         self.settings_table.setToolTip("Double-click a value to edit.")
-        self.settings_table.setRowCount(18)
+        self.settings_table.setRowCount(19)
         self.settings_table.setColumnCount(2)
         self.settings_table.setHorizontalHeaderLabels(["Setting", "Value"])
         v_header = self.settings_table.verticalHeader()
@@ -1561,6 +1576,7 @@ class MainWindow(QMainWindow):
         self.settings_table.setItem(15, 0, QTableWidgetItem("Custom Line Filter"))
         self.settings_table.setItem(16, 0, QTableWidgetItem("Show Flow Indicators"))
         self.settings_table.setItem(17, 0, QTableWidgetItem("Disconnect On Inactive"))
+        self.settings_table.setItem(18, 0, QTableWidgetItem("Auto Serial Update"))
 
         self.tab_settings_set()
 
@@ -1576,7 +1592,7 @@ class MainWindow(QMainWindow):
             general = self.settings["general"]
 
             # Boolean options
-            if key in ("Auto Clear Output", "Maximized", "Reveal Hidden Char", "DTR", "RTS", "Enable Tooltips", "Filter Empty Lines", "Show Flow Indicators", "Disconnect On Inactive"):
+            if key in ("Auto Clear Output", "Maximized", "Reveal Hidden Char", "DTR", "RTS", "Enable Tooltips", "Filter Empty Lines", "Show Flow Indicators", "Disconnect On Inactive", "Auto Serial Update"):
                 value_item = self.settings_table.item(row, 1)
                 if value_item is None:
                     return
@@ -1597,6 +1613,9 @@ class MainWindow(QMainWindow):
                 elif key == "Disconnect On Inactive":
                     general["disconnect_on_inactive"] = new_value
                     self.update_connect_button_appearance()
+                elif key == "Auto Serial Update":
+                    general["auto_serial_update"] = new_value
+                    self.toggle_auto_serial_update(new_value)
                 elif key == "DTR":
                     general["dtr_state"] = new_value
                     # Update serial port if connected
@@ -2565,6 +2584,25 @@ class MainWindow(QMainWindow):
                         self.connect_serial()
                     except Exception as e:
                         self.print_to_display(f"Auto-reconnect failed: {e}")
+
+    def manual_update_serial_ports(self) -> None:
+        """Manually update the serial port list (called by Update Serial button)"""
+        self.populate_port_combo()
+        self.print_to_display("Serial port list updated")
+
+    def toggle_auto_serial_update(self, enabled: bool) -> None:
+        """Toggle automatic serial port updates on or off"""
+        if enabled:
+            # Enable auto-update: start timer and hide button
+            self.refresh_timer.start(1000)
+            self.update_serial_button.setVisible(False)
+            self.print_to_display("Auto serial port update enabled")
+        else:
+            # Disable auto-update: stop timer and show button
+            self.refresh_timer.stop()
+            self.update_serial_button.setVisible(True)
+            self.print_to_display("Auto serial port update disabled - use 'Update Serial' button to refresh")
+        self.save_settings()
 
     def toggle_connection(self) -> None:
         if self.serial_port and self.serial_port.is_open:
