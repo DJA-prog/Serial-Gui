@@ -22,7 +22,7 @@ from DebugHandler import DebugHandler, set_debug_handler, get_debug_handler
 from CrashReportDialog import CrashReportDialog
 
 # Application version
-__version__ = "2.7.0"
+__version__ = "2.7.0_beta"
 
 # Debug mode configuration
 # Set to True to enable comprehensive debugging and crash reporting
@@ -39,7 +39,7 @@ from PyQt5.QtWidgets import (
     QSpinBox, QTabWidget, QFileDialog, QMenu, QAction, QScrollArea
 )
 
-from PyQt5.QtCore import QTimer, Qt, QPoint, pyqtSignal, pyqtSlot, QThread, QEvent, QPropertyAnimation, QEasingCurve
+from PyQt5.QtCore import QTimer, Qt, QPoint, pyqtSignal, pyqtSlot, QThread, QEvent
 from PyQt5.QtGui import QMouseEvent, QCloseEvent, QKeyEvent, QIcon, QStandardItemModel, QStandardItem
 from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QColorDialog, QAbstractItemView
 
@@ -428,11 +428,10 @@ class MainWindow(QMainWindow):
         
         self.middle_layout = QHBoxLayout() # Middle layout: Split into left (tables) and right (output)
         
-        # Create a container widget for the left panel to enable animation
+        # Create a container widget for the left panel
         self.left_panel_container = QWidget()
         self.left_panel_layout = QVBoxLayout(self.left_panel_container)
         self.left_panel_layout.setContentsMargins(0, 0, 0, 0)
-        self.left_panel_visible = True  # Track visibility state
         
         self.create_left_panel()  # Create the left panel with configuration and routing tables
         self.middle_layout.addWidget(self.left_panel_container)
@@ -584,41 +583,6 @@ class MainWindow(QMainWindow):
             index = self.port_combo.findText(last_port)
             if index >= 0:
                 self.port_combo.setCurrentIndex(index)
-
-    def toggle_left_panel(self) -> None:
-        """Toggle the visibility of the left panel with slide animation"""
-        # Calculate the target width
-        if self.left_panel_visible:
-            # Hide panel
-            start_width = self.left_panel_width
-            end_width = 0
-            self.toggle_panel_button.setText("▶ Show Panel")
-        else:
-            # Show panel
-            start_width = 0
-            end_width = self.left_panel_width
-            self.toggle_panel_button.setText("◀ Hide Panel")
-        
-        # Create animation for smooth sliding
-        self.panel_animation = QPropertyAnimation(self.left_panel_container, b"maximumWidth")
-        self.panel_animation.setDuration(300)  # 300ms animation
-        self.panel_animation.setStartValue(start_width)
-        self.panel_animation.setEndValue(end_width)
-        self.panel_animation.setEasingCurve(QEasingCurve.InOutQuad)
-        
-        # Also animate minimum width to ensure smooth resizing
-        self.panel_animation_min = QPropertyAnimation(self.left_panel_container, b"minimumWidth")
-        self.panel_animation_min.setDuration(300)
-        self.panel_animation_min.setStartValue(start_width)
-        self.panel_animation_min.setEndValue(end_width)
-        self.panel_animation_min.setEasingCurve(QEasingCurve.InOutQuad)
-        
-        # Start both animations
-        self.panel_animation.start()
-        self.panel_animation_min.start()
-        
-        # Toggle the visibility state
-        self.left_panel_visible = not self.left_panel_visible
 
     def load_yaml_commands(self, filepath: str) -> dict:
         with open(filepath, "r") as f:
@@ -1813,6 +1777,11 @@ class MainWindow(QMainWindow):
         version_label = QLabel(f"Version: {__version__}")
         version_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         about_layout.addWidget(version_label)
+
+        # Temporary message
+        message_label = QLabel(f"Temp build for those Windows that does not work well with Animations")
+        message_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        about_layout.addWidget(message_label)
         
         about_layout.addSpacing(10)
         
@@ -1976,11 +1945,6 @@ class MainWindow(QMainWindow):
 
         # Predefined commands
         predefined_layout = QHBoxLayout()
-
-        self.toggle_panel_button = QPushButton("◀ Hide Panel")
-        self.toggle_panel_button.clicked.connect(self.toggle_left_panel)
-        self.toggle_panel_button.setToolTip("Show/hide the left panel")
-        predefined_layout.addWidget(self.toggle_panel_button)
 
         for key, button in self.settings["quick_buttons"].items():
             if isinstance(button, dict):
