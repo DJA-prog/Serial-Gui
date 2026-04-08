@@ -10,6 +10,7 @@ from datetime import datetime
 import time
 import threading
 import traceback
+import re
 from typing import Optional, Dict, Any, List
 from queue import Queue
 
@@ -361,7 +362,8 @@ class MainWindow(QMainWindow):
                 'custom_line_filter': '',
                 'show_flow_indicators': True,
                 'disconnect_on_inactive': False,
-                'auto_serial_update': True
+                'auto_serial_update': True,
+                'allow_newer_file_versions': False
             }
         }
         self.default_settings = self.settings.copy()
@@ -627,17 +629,63 @@ class MainWindow(QMainWindow):
         if not isinstance(data, dict):
             raise ValueError("Invalid YAML format")
 
+        file_version = data.get('app_version')
+
         if 'no_input_commands' in data or 'input_required_commands' in data:
             return {
+                'app_version': file_version,
                 'no_input_commands': data.get('no_input_commands', {}),
                 'input_required_commands': data.get('input_required_commands', {})
             }
 
+        flat_commands = {k: v for k, v in data.items() if k != 'app_version'}
+
         return {
+            'app_version': file_version,
             'no_input_commands': {},
             'input_required_commands': {},
-            'commands': data  # fallback if flat dict
+            'commands': flat_commands  # fallback if flat dict
         }
+
+    def parse_version_tuple(self, version: Any) -> Optional[tuple[int, int, int]]:
+        """Parse version string into comparable tuple."""
+        if version in (None, ""):
+            return None
+
+        version_str = str(version).strip().lstrip("vV")
+        if not version_str:
+            return None
+
+        numbers: list[int] = []
+        for part in version_str.split('.'):
+            match = re.match(r"(\d+)", part)
+            if not match:
+                break
+            numbers.append(int(match.group(1)))
+
+        if not numbers:
+            return None
+
+        while len(numbers) < 3:
+            numbers.append(0)
+
+        return (numbers[0], numbers[1], numbers[2])
+
+    def is_file_version_compatible(self, file_version: Any) -> bool:
+        """Check if macro/command file version can be used by this app."""
+        if file_version in (None, ""):
+            return True
+
+        if self.settings.get('general', {}).get('allow_newer_file_versions', False):
+            return True
+
+        app_version_tuple = self.parse_version_tuple(__version__)
+        file_version_tuple = self.parse_version_tuple(file_version)
+
+        if app_version_tuple is None or file_version_tuple is None:
+            return True
+
+        return file_version_tuple <= app_version_tuple
 
     def tab_commands(self) -> None:
         self.commands_tab = QWidget()
@@ -657,6 +705,18 @@ class MainWindow(QMainWindow):
         yaml_files = [f for f in os.listdir(commands_dir) 
                       if f.endswith(".yaml") and os.path.isfile(os.path.join(commands_dir, f))]
         yaml_files.sort()
+        filtered_yaml_files = []
+        for filename in yaml_files:
+            full_path = os.path.join(commands_dir, filename)
+            try:
+                data = self.load_yaml_commands(full_path)
+            except Exception:
+                continue
+
+            if self.is_file_version_compatible(data.get('app_version')):
+                filtered_yaml_files.append(filename)
+
+        yaml_files = filtered_yaml_files
         self.yaml_dropdown.addItems(yaml_files)
 
         # Restore last selected command list
@@ -705,6 +765,13 @@ class MainWindow(QMainWindow):
 
         # --- Load and populate ---
         def populate_command_lists(yaml_filename: str) -> None:
+            self.no_input_list.clear()
+            self.input_required_list.clear()
+            self.flat_command_list.clear()
+
+            if not yaml_filename:
+                return
+
             full_path = os.path.join(commands_dir, yaml_filename)
             if not os.path.exists(full_path):
                 return
@@ -713,14 +780,13 @@ class MainWindow(QMainWindow):
             if os.path.isdir(full_path):
                 return
 
-            self.no_input_list.clear()
-            self.input_required_list.clear()
-            self.flat_command_list.clear()
-
             try:
                 data = self.load_yaml_commands(full_path)
             except Exception as e:
                 print(f"Failed to load {yaml_filename}: {e}")
+                return
+
+            if not self.is_file_version_compatible(data.get('app_version')):
                 return
 
             if 'commands' in data:
@@ -849,6 +915,12 @@ class MainWindow(QMainWindow):
                 try:
                     with open(macro_file, 'r') as f:
                         macro_data = yaml.safe_load(f)
+
+                    if not isinstance(macro_data, dict):
+                        continue
+
+                    if not self.is_file_version_compatible(macro_data.get('app_version')):
+                        continue
                     
                     macro_name = macro_data.get('name', macro_file.stem)
                     
@@ -871,7 +943,7 @@ class MainWindow(QMainWindow):
     def create_new_macro(self) -> None:
         """Open the macro editor to create a new macro"""
         try:
-            editor = MacroEditor(self, style_manager=self.style_manager)
+            editor = MacroEditor(self, style_manager=self.style_manager, app_version=__version__)
             if editor.exec_() == QDialog.Accepted:
                 # Save the new macro
                 macro_name = editor.macro_name
@@ -909,7 +981,7 @@ class MainWindow(QMainWindow):
     
     def edit_macro(self, macro_path: Path) -> None:
         """Open the macro editor to edit an existing macro"""
-        editor = MacroEditor(self, macro_path, style_manager=self.style_manager)
+        editor = MacroEditor(self, macro_path, style_manager=self.style_manager, app_version=__version__)
         if editor.exec_() == QDialog.Accepted:
             self.refresh_macro_list()
     
@@ -933,7 +1005,7 @@ class MainWindow(QMainWindow):
     
     def open_commands_editor(self) -> None:
         """Open the commands editor"""
-        editor = CommandsEditor(self, self.app_configs_path, self.style_manager)
+        editor = CommandsEditor(self, self.app_configs_path, self.style_manager, app_version=__version__)
         editor.exec_()
         
         # Refresh the commands dropdown after editor closes
@@ -951,6 +1023,18 @@ class MainWindow(QMainWindow):
         yaml_files = [f for f in os.listdir(commands_dir) 
                       if f.endswith(".yaml") and os.path.isfile(os.path.join(commands_dir, f))]
         yaml_files.sort()
+        filtered_yaml_files = []
+        for filename in yaml_files:
+            full_path = os.path.join(commands_dir, filename)
+            try:
+                data = self.load_yaml_commands(full_path)
+            except Exception:
+                continue
+
+            if self.is_file_version_compatible(data.get('app_version')):
+                filtered_yaml_files.append(filename)
+
+        yaml_files = filtered_yaml_files
         self.yaml_dropdown.addItems(yaml_files)
         
         # Restore selection if it still exists
@@ -959,7 +1043,7 @@ class MainWindow(QMainWindow):
     
     def create_new_command_list(self) -> None:
         """Create a new command list using the commands editor"""
-        editor = CommandsEditor(self, self.app_configs_path, self.style_manager)
+        editor = CommandsEditor(self, self.app_configs_path, self.style_manager, app_version=__version__)
         # Start with empty lists - filename will be requested on save
         editor.exec_()
         
@@ -973,7 +1057,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "No Selection", "No command list selected. Please select a list or create a new one.")
             return
         
-        editor = CommandsEditor(self, self.app_configs_path, self.style_manager)
+        editor = CommandsEditor(self, self.app_configs_path, self.style_manager, app_version=__version__)
         
         # Load the selected file
         filepath = self.app_configs_path / "commands" / current_file
@@ -983,6 +1067,15 @@ class MainWindow(QMainWindow):
             
             if not isinstance(data, dict):
                 raise ValueError("Invalid YAML format")
+
+            if not self.is_file_version_compatible(data.get('app_version')):
+                QMessageBox.warning(
+                    self,
+                    "Incompatible Command List",
+                    "This command list was created with a newer app version.\n"
+                    "Enable 'Allow Newer File Versions' in Settings to use it."
+                )
+                return
             
             editor.no_input_commands = data.get('no_input_commands', {})
             editor.input_required_commands = data.get('input_required_commands', {})
@@ -1014,6 +1107,18 @@ class MainWindow(QMainWindow):
         try:
             with open(macro_path, 'r') as f:
                 macro_data = yaml.safe_load(f)
+
+            if not isinstance(macro_data, dict):
+                raise ValueError("Invalid macro format")
+
+            if not self.is_file_version_compatible(macro_data.get('app_version')):
+                QMessageBox.warning(
+                    self,
+                    "Incompatible Macro",
+                    "This macro was created with a newer app version.\n"
+                    "Enable 'Allow Newer File Versions' in Settings to use it."
+                )
+                return
             
             macro_name = macro_data.get('name', macro_path.stem)
             steps = macro_data.get('steps', [])
@@ -1533,6 +1638,9 @@ class MainWindow(QMainWindow):
         # Row 18: auto_serial_update (bool)
         auto_serial_update_item = QTableWidgetItem(str(settings.get("auto_serial_update", True)))
         self.settings_table.setItem(18, 1, auto_serial_update_item)
+        # Row 19: allow_newer_file_versions (bool)
+        allow_newer_versions_item = QTableWidgetItem(str(settings.get("allow_newer_file_versions", False)))
+        self.settings_table.setItem(19, 1, allow_newer_versions_item)
 
     def tab_settings(self) -> None:
 
@@ -1542,7 +1650,7 @@ class MainWindow(QMainWindow):
         # Settings table
         self.settings_table = QTableWidget()
         self.settings_table.setToolTip("Double-click a value to edit.")
-        self.settings_table.setRowCount(19)
+        self.settings_table.setRowCount(20)
         self.settings_table.setColumnCount(2)
         self.settings_table.setHorizontalHeaderLabels(["Setting", "Value"])
         v_header = self.settings_table.verticalHeader()
@@ -1577,6 +1685,7 @@ class MainWindow(QMainWindow):
         self.settings_table.setItem(16, 0, QTableWidgetItem("Show Flow Indicators"))
         self.settings_table.setItem(17, 0, QTableWidgetItem("Disconnect On Inactive"))
         self.settings_table.setItem(18, 0, QTableWidgetItem("Auto Serial Update"))
+        self.settings_table.setItem(19, 0, QTableWidgetItem("Allow Newer File Versions"))
 
         self.tab_settings_set()
 
@@ -1592,7 +1701,7 @@ class MainWindow(QMainWindow):
             general = self.settings["general"]
 
             # Boolean options
-            if key in ("Auto Clear Output", "Maximized", "Reveal Hidden Char", "DTR", "RTS", "Enable Tooltips", "Filter Empty Lines", "Show Flow Indicators", "Disconnect On Inactive", "Auto Serial Update"):
+            if key in ("Auto Clear Output", "Maximized", "Reveal Hidden Char", "DTR", "RTS", "Enable Tooltips", "Filter Empty Lines", "Show Flow Indicators", "Disconnect On Inactive", "Auto Serial Update", "Allow Newer File Versions"):
                 value_item = self.settings_table.item(row, 1)
                 if value_item is None:
                     return
@@ -1616,6 +1725,10 @@ class MainWindow(QMainWindow):
                 elif key == "Auto Serial Update":
                     general["auto_serial_update"] = new_value
                     self.toggle_auto_serial_update(new_value)
+                elif key == "Allow Newer File Versions":
+                    general["allow_newer_file_versions"] = new_value
+                    self.refresh_commands_dropdown()
+                    self.refresh_macro_list()
                 elif key == "DTR":
                     general["dtr_state"] = new_value
                     # Update serial port if connected
@@ -2392,6 +2505,8 @@ class MainWindow(QMainWindow):
                     ]
                     for option in options_to_remove:
                         settings['general'].pop(option, None)
+
+                    settings['general'].setdefault('allow_newer_file_versions', False)
                 
                 self.settings = settings
                 # print(f"Settings loaded: {self.settings}")

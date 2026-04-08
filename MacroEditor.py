@@ -922,11 +922,12 @@ class MenuSingleBlock(MacroBlock):
 class MacroEditor(QDialog):
     """Main macro editor dialog"""
     
-    def __init__(self, parent=None, macro_path: Optional[Path] = None, macro_name: str = "", style_manager: Optional['StyleManager'] = None):
+    def __init__(self, parent=None, macro_path: Optional[Path] = None, macro_name: str = "", style_manager: Optional['StyleManager'] = None, app_version: str = ""):
         super().__init__(parent)
         self.macro_path = macro_path
         self.macro_name = macro_name
         self.style_manager = style_manager
+        self.app_version = app_version
         
         # Get colors from style_manager if available
         if style_manager:
@@ -1215,6 +1216,7 @@ class MacroEditor(QDialog):
             
             macro_data = {
                 'name': name,
+                'app_version': self.app_version,
                 'steps': steps
             }
             

@@ -29,7 +29,7 @@ from PyQt5.QtCore import Qt
 class CommandsEditor(QDialog):
     """Editor for managing command YAML files with two command lists"""
     
-    def __init__(self, parent=None, config_path: Optional[Path] = None, style_manager: Optional['StyleManager'] = None):
+    def __init__(self, parent=None, config_path: Optional[Path] = None, style_manager: Optional['StyleManager'] = None, app_version: str = ""):
         super().__init__(parent)
         
         debug = get_debug_handler()
@@ -41,6 +41,7 @@ class CommandsEditor(QDialog):
             self.config_path = config_path or Path.home() / ".config" / "SerialCommunicationMonitor"
             self.commands_dir = self.config_path / "commands"
             self.commands_dir.mkdir(parents=True, exist_ok=True)
+            self.app_version = app_version
             
             self.current_file: Optional[str] = None
             self.no_input_commands: Dict[str, str] = {}
@@ -430,6 +431,7 @@ class CommandsEditor(QDialog):
             filepath = self.commands_dir / self.current_file
             
             data = {
+                'app_version': self.app_version,
                 'no_input_commands': self.no_input_commands,
                 'input_required_commands': self.input_required_commands
             }
