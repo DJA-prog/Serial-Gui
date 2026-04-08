@@ -2702,8 +2702,12 @@ class MainWindow(QMainWindow):
 
     def manual_update_serial_ports(self) -> None:
         """Manually update the serial port list (called by Update Serial button)"""
+        self.available_ports = self.get_serial_ports()
         self.populate_port_combo()
-        self.print_to_display("Serial port list updated")
+        if self.available_ports:
+            self.print_to_display(f"Serial port list updated ({len(self.available_ports)} found)")
+        else:
+            self.print_to_display("Serial port list updated (no ports found)")
 
     def toggle_auto_serial_update(self, enabled: bool) -> None:
         """Toggle automatic serial port updates on or off"""
@@ -2928,6 +2932,10 @@ class MainWindow(QMainWindow):
             command_str: Command to send. If None, reads from self.command_input
             clear_input: Whether to clear self.command_input after sending (only when command_str is None)
         """
+        # QPushButton.clicked can pass a bool argument; treat it as "no explicit command".
+        if isinstance(command_str, bool):
+            command_str = None
+
         # If no command provided, read from main command input
         if command_str is None:
             command = self.command_input.text().strip()
