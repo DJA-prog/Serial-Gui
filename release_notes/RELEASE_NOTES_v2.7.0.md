@@ -32,6 +32,17 @@
 - The button is automatically shown when **Auto Serial Update** is disabled.
 - Clicking **Update Serial** refreshes the port list on demand.
 - A status message is printed to the output area after manual refresh.
+- Fixed manual refresh to perform a fresh port scan before repopulating the combo box.
+
+### Output Display Options in Settings
+
+#### Settings Relocation
+- Moved **Display Format** (text/hex) control from output context menu to Settings.
+- Moved **Show Timestamps** toggle from output context menu to Settings.
+- Output context menu now keeps text actions only (Copy / Select All).
+
+#### Stability Fix
+- Fixed a crash when clicking Send caused by Qt passing a boolean signal argument into `send_command()`.
 
 #### Smart UI Behavior
 - The refresh timer now starts only when auto update is enabled.
@@ -60,8 +71,10 @@
 - Added command/macro filtering based on compatibility setting.
 
 ### Settings Table Updates
-- Increased settings table row count from `19` to `20`.
+- Increased settings table row count from `19` to `22`.
 - Added new row: **Allow Newer File Versions**.
+- Added new row: **Display Format**.
+- Added new row: **Show Timestamps**.
 - Added handling for boolean edit/validation and immediate apply behavior.
 
 ### Version Update
