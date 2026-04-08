@@ -1641,6 +1641,12 @@ class MainWindow(QMainWindow):
         # Row 19: allow_newer_file_versions (bool)
         allow_newer_versions_item = QTableWidgetItem(str(settings.get("allow_newer_file_versions", False)))
         self.settings_table.setItem(19, 1, allow_newer_versions_item)
+        # Row 20: display_format (text/hex)
+        display_format_item = QTableWidgetItem(str(settings.get("display_format", "text")))
+        self.settings_table.setItem(20, 1, display_format_item)
+        # Row 21: show_timestamps (bool)
+        show_timestamps_item = QTableWidgetItem(str(settings.get("show_timestamps", False)))
+        self.settings_table.setItem(21, 1, show_timestamps_item)
 
     def tab_settings(self) -> None:
 
@@ -1650,7 +1656,7 @@ class MainWindow(QMainWindow):
         # Settings table
         self.settings_table = QTableWidget()
         self.settings_table.setToolTip("Double-click a value to edit.")
-        self.settings_table.setRowCount(20)
+        self.settings_table.setRowCount(22)
         self.settings_table.setColumnCount(2)
         self.settings_table.setHorizontalHeaderLabels(["Setting", "Value"])
         v_header = self.settings_table.verticalHeader()
@@ -1686,6 +1692,8 @@ class MainWindow(QMainWindow):
         self.settings_table.setItem(17, 0, QTableWidgetItem("Disconnect On Inactive"))
         self.settings_table.setItem(18, 0, QTableWidgetItem("Auto Serial Update"))
         self.settings_table.setItem(19, 0, QTableWidgetItem("Allow Newer File Versions"))
+        self.settings_table.setItem(20, 0, QTableWidgetItem("Display Format"))
+        self.settings_table.setItem(21, 0, QTableWidgetItem("Show Timestamps"))
 
         self.tab_settings_set()
 
@@ -1701,7 +1709,7 @@ class MainWindow(QMainWindow):
             general = self.settings["general"]
 
             # Boolean options
-            if key in ("Auto Clear Output", "Maximized", "Reveal Hidden Char", "DTR", "RTS", "Enable Tooltips", "Filter Empty Lines", "Show Flow Indicators", "Disconnect On Inactive", "Auto Serial Update", "Allow Newer File Versions"):
+            if key in ("Auto Clear Output", "Maximized", "Reveal Hidden Char", "DTR", "RTS", "Enable Tooltips", "Filter Empty Lines", "Show Flow Indicators", "Disconnect On Inactive", "Auto Serial Update", "Allow Newer File Versions", "Show Timestamps"):
                 value_item = self.settings_table.item(row, 1)
                 if value_item is None:
                     return
@@ -1729,6 +1737,8 @@ class MainWindow(QMainWindow):
                     general["allow_newer_file_versions"] = new_value
                     self.refresh_commands_dropdown()
                     self.refresh_macro_list()
+                elif key == "Show Timestamps":
+                    general["show_timestamps"] = new_value
                 elif key == "DTR":
                     general["dtr_state"] = new_value
                     # Update serial port if connected
@@ -1850,6 +1860,18 @@ class MainWindow(QMainWindow):
                 if ok:
                     self.settings_table.setItem(row, 1, QTableWidgetItem(new_value))
                     general["custom_line_filter"] = new_value
+                    self.save_settings()
+
+            elif key == "Display Format":
+                items = ["text", "hex"]
+                current_value = str(general.get("display_format", "text"))
+                current_index = items.index(current_value) if current_value in items else 0
+                new_value, ok = QInputDialog.getItem(
+                    self, "Edit Display Format", "Select display format:", items, current_index, False
+                )
+                if ok and new_value:
+                    self.settings_table.setItem(row, 1, QTableWidgetItem(new_value))
+                    general["display_format"] = new_value
                     self.save_settings()
 
         self.settings_table.cellDoubleClicked.connect(edit_setting)
@@ -2192,7 +2214,7 @@ class MainWindow(QMainWindow):
 
     def show_output_context_menu(self, pos) -> None:
         """
-        Shows a context menu for the output display with options to toggle hex/text and timestamps.
+        Shows a context menu for the output display.
         """
         menu = QMenu(self)
         
@@ -2206,28 +2228,6 @@ class MainWindow(QMainWindow):
         
         menu.addAction(copy_action)
         menu.addAction(select_all_action)
-        menu.addSeparator()
-        
-        # Display format toggle
-        current_format = self.settings.get('general', {}).get('display_format', 'text')
-        if current_format == 'text':
-            format_action = QAction("Switch to Hex Display", self)
-            format_action.triggered.connect(lambda: self.toggle_display_format('hex'))
-        else:
-            format_action = QAction("Switch to Text Display", self)
-            format_action.triggered.connect(lambda: self.toggle_display_format('text'))
-        
-        # Timestamp toggle
-        show_timestamps = self.settings.get('general', {}).get('show_timestamps', False)
-        if show_timestamps:
-            timestamp_action = QAction("Hide Timestamps", self)
-            timestamp_action.triggered.connect(lambda: self.toggle_timestamps(False))
-        else:
-            timestamp_action = QAction("Show Timestamps", self)
-            timestamp_action.triggered.connect(lambda: self.toggle_timestamps(True))
-        
-        menu.addAction(format_action)
-        menu.addAction(timestamp_action)
         
         menu.exec_(self.response_display.mapToGlobal(pos))
 
