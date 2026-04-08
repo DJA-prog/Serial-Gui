@@ -9,7 +9,7 @@ param(
     [string]$BuildMode = 'release'
 )
 
-$version = "2.5.0"
+$version = "2.7.0"
 
 # Add 'd' suffix for debug builds
 if ($BuildMode -eq 'debug') {
@@ -67,10 +67,10 @@ if (Test-Path "build") {
     Remove-Item -Recurse -Force "build"
     Write-Host "  Removed build directory" -ForegroundColor Gray
 }
-if (Test-Path "dist") {
-    Remove-Item -Recurse -Force "dist"
-    Write-Host "  Removed dist directory" -ForegroundColor Gray
-}
+#if (Test-Path "dist") {
+#    Remove-Item -Recurse -Force "dist"
+#    Write-Host "  Removed dist directory" -ForegroundColor Gray
+#}
 if (Test-Path "*.spec") {
     Remove-Item -Force "*.spec"
     Write-Host "  Removed old spec files" -ForegroundColor Gray
@@ -89,30 +89,32 @@ Write-Host ""
 
 # Base build command
 $buildCommand = @(
-    "pyinstaller",
-    "--onefile",                                               # Single executable file
-    "--name=Serial_monitor_v" + $versionSuffix + "_x86-64",    # Output executable name with version suffix
-    "--icon=images\icon.png",                                  # Application icon
-    "'"--add-data=images\icon.png;images"'",                       # Include icon for runtime use
-    "'"--add-data=commands;commands"'",                            # Include command YAML files
-    "--clean",                                                 # Clean PyInstaller cache
-    "--noconfirm"                                              # Overwrite without confirmation
+    "pyinstaller "+
+    "--onefile "+                                               # Single executable file
+    "--name=Serial_monitor_v" + $versionSuffix + "_x86-64 "+    # Output executable name with version suffix
+    "--icon=images\icon.png "+                                 # Application icon
+    "'--add-data=images\icon.png;images' "+                       # Include icon for runtime use
+    "'--add-data=commands;commands' "+                            # Include command YAML files
+    "--clean "+                                                 # Clean PyInstaller cache
+    "--noconfirm "                                              # Overwrite without confirmation
 )
 
 # Add mode-specific flags
 if ($BuildMode -eq 'debug') {
     # Debug mode: Show console window for debugging output
-    $buildCommand += "--console"
-    $buildCommand += "--debug=all"                             # Enable PyInstaller debug output
+    $buildCommand += "--console "
+    $buildCommand += "--debug=all "                             # Enable PyInstaller debug output
     Write-Host "Debug mode enabled: Console window will be visible" -ForegroundColor Yellow
 } else {
     # Release mode: No console window (GUI only)
-    $buildCommand += "--windowed"
+    $buildCommand += "--windowed "
     Write-Host "Release mode: GUI-only executable" -ForegroundColor Green
 }
 
 # Add the main Python file
 $buildCommand += "App.py"
+
+echo $buildCommand
 
 # Execute the build command
 Write-Host "Running PyInstaller..." -ForegroundColor Yellow

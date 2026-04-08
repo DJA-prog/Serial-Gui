@@ -4,7 +4,7 @@
 #        Default is 'release' if no parameter provided
 
 BUILD_MODE=${1:-release}
-VERSION="2.5.0"
+VERSION="2.7.0"
 
 # Validate build mode
 if [[ "$BUILD_MODE" != "release" && "$BUILD_MODE" != "debug" ]]; then
