@@ -6,6 +6,8 @@ We release patches for security vulnerabilities in the following versions:
 
 | Version | Supported          |
 | ------- | ------------------ |
+| 2.7.x   | :white_check_mark: |
+| 2.6.x   | :white_check_mark: |
 | 2.5.x   | :white_check_mark: |
 | 2.4.x   | :white_check_mark: |
 | 2.3.x   | :x:                |
@@ -134,5 +136,5 @@ We would like to thank all security researchers who have responsibly disclosed v
 
 ---
 
-**Last Updated**: February 8, 2026  
-**Policy Version**: 1.0
+**Last Updated**: April 8, 2026  
+**Policy Version**: 1.1
