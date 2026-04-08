@@ -362,7 +362,7 @@ class MainWindow(QMainWindow):
                 'custom_line_filter': '',
                 'show_flow_indicators': True,
                 'disconnect_on_inactive': False,
-                'auto_serial_update': True,
+                'auto_serial_update': False,
                 'allow_newer_file_versions': False
             }
         }
@@ -408,7 +408,7 @@ class MainWindow(QMainWindow):
         self.refresh_timer = QTimer()
         self.refresh_timer.timeout.connect(self.refresh_serial_ports)
         # Only start timer if auto_serial_update is enabled
-        if self.settings.get('general', {}).get('auto_serial_update', True):
+        if self.settings.get('general', {}).get('auto_serial_update', False):
             self.refresh_timer.start(1000)  # Refresh every 1 second
 
         # Timer for connected time
@@ -425,7 +425,7 @@ class MainWindow(QMainWindow):
         self.create_top_ribbon()  # Create the top ribbon with serial controls
 
         # Set initial visibility of Update Serial button based on auto_serial_update setting
-        auto_update_enabled = self.settings.get('general', {}).get('auto_serial_update', True)
+        auto_update_enabled = self.settings.get('general', {}).get('auto_serial_update', False)
         self.update_serial_button.setVisible(not auto_update_enabled)
         
         self.middle_layout = QHBoxLayout() # Middle layout: Split into left (tables) and right (output)
@@ -1636,7 +1636,7 @@ class MainWindow(QMainWindow):
         disconnect_on_inactive_item = QTableWidgetItem(str(settings.get("disconnect_on_inactive", False)))
         self.settings_table.setItem(17, 1, disconnect_on_inactive_item)
         # Row 18: auto_serial_update (bool)
-        auto_serial_update_item = QTableWidgetItem(str(settings.get("auto_serial_update", True)))
+        auto_serial_update_item = QTableWidgetItem(str(settings.get("auto_serial_update", False)))
         self.settings_table.setItem(18, 1, auto_serial_update_item)
         # Row 19: allow_newer_file_versions (bool)
         allow_newer_versions_item = QTableWidgetItem(str(settings.get("allow_newer_file_versions", False)))
@@ -2506,8 +2506,8 @@ class MainWindow(QMainWindow):
                     for option in options_to_remove:
                         settings['general'].pop(option, None)
 
+                    settings['general'].setdefault('auto_serial_update', False)
                     settings['general'].setdefault('allow_newer_file_versions', False)
-                
                 self.settings = settings
                 # print(f"Settings loaded: {self.settings}")
             
@@ -2868,8 +2868,11 @@ class MainWindow(QMainWindow):
                     self.debug_handler.log(f"Error during disconnect: {e}", "ERROR")
                 raise
 
-            # Resume refreshing ports when disconnected
-            self.refresh_timer.start(1000)
+            # Resume refreshing only when auto update is enabled
+            if self.settings.get('general', {}).get('auto_serial_update', False):
+                self.refresh_timer.start(1000)
+            else:
+                self.refresh_timer.stop()
 
             # Reset UI elements
             self.update_connect_button_appearance()

@@ -4,11 +4,27 @@
 
 ## What's New in v2.7.0
 
+### Macro and Command File Version Compatibility
+
+#### Version Metadata in Saved Files
+- Macro files now save the app version in `app_version`.
+- Command list files now save the app version in `app_version`.
+
+#### Compatibility Rules
+- Files with no `app_version` are always allowed.
+- Files with version less than or equal to the running app version are allowed.
+- Files with newer version are ignored by default.
+
+#### New Compatibility Setting
+- Added **Allow Newer File Versions** in Settings.
+- Default value is **False** for safer compatibility behavior.
+- When enabled, newer-version macro and command files are shown and can be used.
+
 ### Serial Port Update Control
 
 #### New Auto Serial Update Setting
 - Added a new **Auto Serial Update** setting in the Settings tab.
-- Default value is **True** to preserve current behavior for existing users.
+- Default value is **False** so auto scanning is opt-in.
 - When enabled, the app continues refreshing serial ports automatically every second.
 
 #### New Manual Update Workflow
@@ -21,21 +37,31 @@
 - The refresh timer now starts only when auto update is enabled.
 - Switching the setting immediately applies behavior without restarting the app.
 - The app now toggles between automatic refresh and manual refresh mode dynamically.
+- Fixed a bug where scanning could restart after disconnect even when disabled.
 
 ## Technical Details
 
 ### Updated Defaults
-- `settings['general']['auto_serial_update']` added with default value `True`.
+- `settings['general']['auto_serial_update']` added with default value `False`.
+- `settings['general']['allow_newer_file_versions']` added with default value `False`.
+
+### Version Gating Logic
+- Added app/file version comparison for macro and command files.
+- Added compatibility checks while listing, opening, and executing files.
+- Added parser support for debug-style versions such as `2.7.0d`.
 
 ### MainWindow Changes
 - Added `self.update_serial_button` in the top ribbon.
 - Added `manual_update_serial_ports()` for manual list refresh.
 - Added `toggle_auto_serial_update(enabled: bool)` to switch refresh mode.
 - Updated timer startup logic to respect `auto_serial_update` on launch.
+- Updated disconnect logic so scan timer resumes only when auto update is enabled.
+- Added `parse_version_tuple()` and `is_file_version_compatible()`.
+- Added command/macro filtering based on compatibility setting.
 
 ### Settings Table Updates
-- Increased settings table row count from `18` to `19`.
-- Added new row: **Auto Serial Update**.
+- Increased settings table row count from `19` to `20`.
+- Added new row: **Allow Newer File Versions**.
 - Added handling for boolean edit/validation and immediate apply behavior.
 
 ### Version Update
@@ -43,8 +69,9 @@
 
 ## Upgrade Notes
 - No breaking changes.
-- Existing users retain automatic serial refresh by default.
-- Users who prefer full manual control can disable auto update and use the new button.
+- Auto serial refresh is disabled by default and can be enabled manually in Settings.
+- Users have full manual control via the **Update Serial** button.
+- Existing macro/command files without version metadata continue to work normally.
 
 ## Known Issues
 - Automatic serial port scanning may interrupt some serial devices and processes.
