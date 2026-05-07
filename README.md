@@ -9,6 +9,8 @@
 ![PyQt5](https://img.shields.io/badge/PyQt5-5.15+-green.svg)
 ![Status](https://img.shields.io/badge/status-active-success.svg)
 
+# **This project has been moved to [gitlab](https://gitlab.com/DJA-prog/Serial-Gui)**
+
 A modern, cross-platform serial monitor application built with PyQt5. This tool provides a powerful and user-friendly interface for interacting with serial devices, managing commands, executing macros, and viewing responses in real time.
 
 ![Preview](images/V2.5.0_preview.png)
